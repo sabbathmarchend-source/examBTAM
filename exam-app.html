@@ -1136,6 +1136,10 @@ python -m http.server 8080</pre>
           <pre style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;font-size:0.75rem;margin-top:8px;overflow-x:auto;color:var(--gold)">rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /se_exams/{doc} {
+      allow read: if true;
+      allow write: if true;
+    }
     match /se_results/{doc} {
       allow write: if true;
       allow read: if true;
@@ -1275,6 +1279,40 @@ function saveAllExams() {
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function findExamByCode(code) {
   return allExams.find(e => e.code === code.trim().toUpperCase()) || null;
+}
+
+// ── Cloud exam sync ───────────────────────
+async function cloudSaveExam(exam) {
+  if (!db) return;
+  try {
+    await db.collection('se_exams').doc(exam.id).set({
+      ...exam,
+      _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) { console.warn('Cloud save exam failed:', e); }
+}
+
+async function cloudDeleteExam(examId) {
+  if (!db) return;
+  try { await db.collection('se_exams').doc(examId).delete(); } catch(e) {}
+}
+
+async function cloudLoadExams() {
+  if (!db) return null;
+  try {
+    const snap = await db.collection('se_exams').get();
+    return snap.docs.map(d => d.data());
+  } catch(e) { console.warn('Cloud load exams failed:', e); return null; }
+}
+
+async function cloudFindExamByCode(code) {
+  if (!db) return null;
+  try {
+    const snap = await db.collection('se_exams')
+      .where('code', '==', code.trim().toUpperCase()).limit(1).get();
+    if (snap.empty) return null;
+    return snap.docs[0].data();
+  } catch(e) { return null; }
 }
 
 // ══════════════════════════════════════════
@@ -1737,10 +1775,26 @@ function showScreen(name) {
   }
 }
 
-function goAdmin() {
-  requireAdminAuth(() => {
+async function goAdmin() {
+  requireAdminAuth(async () => {
     showScreen('admin');
     loadAllExams();
+    // Sync exam list from cloud → merge with localStorage
+    if (db) {
+      const cloudExams = await cloudLoadExams();
+      if (cloudExams) {
+        cloudExams.forEach(ce => {
+          if (!allExams.find(e => e.id === ce.id)) {
+            allExams.push(ce);
+          } else {
+            // Update local copy with cloud version (cloud is authoritative)
+            const idx = allExams.findIndex(e => e.id === ce.id);
+            if (idx >= 0) allExams[idx] = ce;
+          }
+        });
+        saveAllExams();
+      }
+    }
     renderExamList();
     switchAdminTab('ujian');
     const badge = document.getElementById('tab-hasil-badge');
@@ -1851,9 +1905,13 @@ function confirmDeleteExam(id) {
   document.getElementById('modal-del-exam').classList.remove('hidden');
 }
 
-function deleteExam(id) {
+async function deleteExam(id) {
   const exam = allExams.find(e => e.id === id);
-  if (exam) resetAllAttempts(exam.code);
+  if (exam) {
+    resetAllAttempts(exam.code);
+    await cloudResetAttemptsByExam(exam.code);
+    await cloudDeleteExam(id);
+  }
   allExams = allExams.filter(e => e.id !== id);
   saveAllExams();
   if (activeExamId === id) {
@@ -2073,20 +2131,20 @@ function clearAll() {
   updateAdminSummary();
 }
 
-function saveAndPreview() {
+async function saveAndPreview() {
   if (questions.length === 0) { toast('Tambahkan soal terlebih dahulu!', 'error'); return; }
   const name = document.getElementById('exam-name').value.trim();
   const code = document.getElementById('exam-code').value.trim().toUpperCase();
   if (!name || !code) { toast('Isi nama dan kode ujian!', 'error'); return; }
-  // Check code uniqueness (excluding current exam)
   const duplicate = allExams.find(e => e.code === code && e.id !== activeExamId);
   if (duplicate) { toast('Kode ujian sudah digunakan oleh ujian lain!', 'error'); return; }
-  saveCurrentExam();
-  toast(`Ujian "${name}" disimpan! Kode: ${code}`, 'ok');
+  await saveCurrentExam();
+  const cloudInfo = db ? ' & disinkron ke cloud ☁️' : ' (cloud belum terhubung)';
+  toast(`Ujian "${name}" disimpan${cloudInfo}`, 'ok');
   renderExamList();
 }
 
-function saveCurrentExam() {
+async function saveCurrentExam() {
   const exam = {
     id: activeExamId || genId(),
     name: document.getElementById('exam-name').value.trim(),
@@ -2113,7 +2171,8 @@ function saveCurrentExam() {
     else allExams.push(exam);
   }
   examConfig = exam;
-  saveAllExams();
+  saveAllExams();              // localStorage (admin device)
+  await cloudSaveExam(exam);  // Firebase (all devices)
 }
 
 function exportExam() {
@@ -2260,11 +2319,12 @@ async function startExam() {
   if (!code)         { toast('Isi kode ujian!', 'error'); return; }
   if (!agreed)       { toast('Anda harus menyetujui peraturan ujian!', 'error'); return; }
 
-  // Find exam from allExams
+  // ── Find exam ────────────────────────────
+  // 1. Check localStorage first (fast, works offline for admin device)
   loadAllExams();
   let cfg = findExamByCode(code);
 
-  // Fallback: support legacy single-config storage
+  // 2. Check legacy single-config format
   if (!cfg) {
     try {
       const legacy = JSON.parse(localStorage.getItem('secureexam_config') || 'null');
@@ -2272,8 +2332,36 @@ async function startExam() {
     } catch(e) {}
   }
 
-  if (!cfg)                                 { toast('Kode ujian tidak ditemukan. Hubungi pengawas.', 'error'); return; }
-  if (!cfg.questions || !cfg.questions.length) { toast('Ujian belum memiliki soal!', 'error'); return; }
+  // 3. Fetch from cloud (covers all other devices — HP peserta, dll)
+  if (!cfg) {
+    if (!db) {
+      toast('Kode ujian tidak ditemukan. Pastikan Anda terhubung ke cloud atau hubungi pengawas.', 'error');
+      return;
+    }
+    const startBtn = document.querySelector('#screen-entry .btn-gold');
+    const origText = startBtn.textContent;
+    startBtn.disabled = true;
+    startBtn.textContent = '⏳ Mencari ujian...';
+    cfg = await cloudFindExamByCode(code);
+    startBtn.disabled = false;
+    startBtn.textContent = origText;
+    if (cfg) {
+      // Cache locally so subsequent lookups are fast
+      if (!allExams.find(e => e.id === cfg.id)) {
+        allExams.push(cfg);
+        saveAllExams();
+      }
+    }
+  }
+
+  if (!cfg) {
+    toast('Kode ujian tidak ditemukan. Periksa kembali kode yang Anda masukkan.', 'error');
+    return;
+  }
+  if (!cfg.questions || !cfg.questions.length) {
+    toast('Ujian belum memiliki soal. Hubungi pengawas.', 'error');
+    return;
+  }
 
   // ── ONE-TIME ATTEMPT CHECK ──────────────
   // Check localStorage first (fast), then cloud (authoritative)
