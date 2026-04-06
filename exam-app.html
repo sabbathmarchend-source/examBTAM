@@ -592,6 +592,7 @@
       <div id="cloud-status-badge" class="cloud-badge disconnected" onclick="openCloudSetup()" title="Klik untuk setup koneksi cloud">
         <div class="cloud-dot"></div><span>Cloud: Tidak Aktif</span>
       </div>
+      <button class="btn btn-green btn-sm" id="btn-copy-link" onclick="copyStudentLink()" title="Salin link untuk dibagikan ke peserta" style="display:none">🔗 Salin Link Peserta</button>
       <button class="btn btn-ghost btn-sm" onclick="downloadExcelAll()">📊 Download Hasil</button>
       <button class="btn btn-ghost btn-sm" onclick="changeAdminPin()" title="Ganti PIN Admin">🔑 Ganti PIN</button>
       <button class="btn btn-outline btn-sm" onclick="logoutAdmin()">⏻ Keluar</button>
@@ -1159,6 +1160,18 @@ service cloud.firestore {
         placeholder='{&#10;  "apiKey": "AIza...",&#10;  "authDomain": "nama-project.firebaseapp.com",&#10;  "projectId": "nama-project",&#10;  "storageBucket": "nama-project.appspot.com",&#10;  "messagingSenderId": "123456789",&#10;  "appId": "1:123:web:abc..."&#10;}'></textarea>
     </div>
     <div id="cloud-test-result" style="font-size:0.83rem;min-height:20px;margin-bottom:12px"></div>
+
+    <!-- Shareable student link — shown after successful connection -->
+    <div id="cloud-student-link-wrap" class="hidden" style="margin-bottom:16px;padding:16px;background:rgba(75,232,138,0.07);border:1px solid rgba(75,232,138,0.25);border-radius:10px">
+      <div style="font-size:0.82rem;font-weight:600;color:var(--green);margin-bottom:10px">🔗 Link untuk Peserta</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:10px">Bagikan link di bawah ini ke peserta. Mereka cukup membuka link ini — Firebase sudah otomatis aktif, tidak perlu konfigurasi apapun.</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="student-link-display" readonly
+          style="flex:1;font-family:'DM Mono',monospace;font-size:0.72rem;background:rgba(0,0,0,0.3);border-color:rgba(75,232,138,0.3)">
+        <button class="btn btn-green btn-sm" onclick="copyStudentLink()">📋 Salin</button>
+      </div>
+    </div>
+
     <div class="flex-row">
       <button class="btn btn-gold" id="cloud-save-btn" onclick="saveFirebaseConfig()">💾 Simpan & Hubungkan</button>
       <button class="btn btn-ghost btn-sm" onclick="disconnectCloud()">Putuskan Koneksi</button>
@@ -1341,6 +1354,26 @@ async function initFirebase(config) {
 }
 
 async function loadSavedFirebaseConfig() {
+  // ── Priority 1: config embedded in URL (?cfg=BASE64)
+  // This is what students use — admin generates the URL, students just open it
+  try {
+    const params = new URLSearchParams(location.search);
+    const cfgParam = params.get('cfg');
+    if (cfgParam) {
+      const config = JSON.parse(atob(cfgParam));
+      if (config.apiKey && config.projectId) {
+        const ok = await initFirebase(config);
+        if (ok) {
+          // Also cache in localStorage so subsequent loads are instant
+          localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(config));
+          updateCloudBadge('connected');
+          return;
+        }
+      }
+    }
+  } catch(e) {}
+
+  // ── Priority 2: config previously saved in localStorage (admin device)
   try {
     const raw = localStorage.getItem(FB_CONFIG_KEY);
     if (!raw) return;
@@ -1352,27 +1385,75 @@ async function loadSavedFirebaseConfig() {
 
 function updateCloudBadge(state) {
   const badge = document.getElementById('cloud-status-badge');
+  const linkBtn = document.getElementById('btn-copy-link');
   if (!badge) return;
   const states = {
-    connected:    { cls: 'connected',    icon: '●', text: 'Cloud: Terhubung', pulse: true },
-    disconnected: { cls: 'disconnected', icon: '○', text: 'Cloud: Tidak Aktif', pulse: false },
-    error:        { cls: 'error',        icon: '✕', text: 'Cloud: Error', pulse: false },
-    syncing:      { cls: 'connected',    icon: '↻', text: 'Cloud: Menyinkron...', pulse: true },
+    connected:    { cls: 'connected',    text: 'Cloud: Terhubung', pulse: true },
+    disconnected: { cls: 'disconnected', text: 'Cloud: Tidak Aktif', pulse: false },
+    error:        { cls: 'error',        text: 'Cloud: Error', pulse: false },
+    syncing:      { cls: 'connected',    text: 'Cloud: Menyinkron...', pulse: true },
   };
   const s = states[state] || states.disconnected;
   badge.className = `cloud-badge ${s.cls}`;
   badge.innerHTML = `<div class="cloud-dot${s.pulse?' pulse':''}"></div><span>${s.text}</span>`;
+  // Show/hide student link button
+  if (linkBtn) linkBtn.style.display = (state === 'connected') ? '' : 'none';
+}
+
+// ── Student link generation ───────────────
+function buildStudentLink() {
+  const raw = localStorage.getItem(FB_CONFIG_KEY);
+  if (!raw) return null;
+  try {
+    const encoded = btoa(raw);
+    const base = location.href.split('?')[0].split('#')[0];
+    return `${base}?cfg=${encoded}`;
+  } catch(e) { return null; }
+}
+
+function copyStudentLink() {
+  const link = buildStudentLink();
+  if (!link) {
+    toast('Cloud belum terhubung. Hubungkan Firebase terlebih dahulu.', 'error');
+    openCloudSetup();
+    return;
+  }
+  navigator.clipboard.writeText(link).then(() => {
+    toast('✅ Link peserta disalin! Bagikan ke peserta via WhatsApp/chat.', 'ok');
+  }).catch(() => {
+    // Fallback: show the link in a prompt
+    prompt('Salin link berikut dan bagikan ke peserta:', link);
+  });
+}
+
+function copyExamStudentLink(examId) {
+  // Link per ujian — same base link, exam code will be entered by student manually
+  // The cfg param is what matters; the exam code is shared verbally/separately
+  copyStudentLink();
+}
+
+function showStudentLinkInModal() {
+  const link = buildStudentLink();
+  const wrap = document.getElementById('cloud-student-link-wrap');
+  const input = document.getElementById('student-link-display');
+  if (!wrap || !input) return;
+  if (link) {
+    input.value = link;
+    wrap.classList.remove('hidden');
+  } else {
+    wrap.classList.add('hidden');
+  }
 }
 
 // ── Cloud Setup Modal ─────────────────────
 function openCloudSetup() {
-  // Pre-fill if config exists
   const raw = localStorage.getItem(FB_CONFIG_KEY);
   if (raw) {
     try { document.getElementById('firebase-config-input').value = JSON.stringify(JSON.parse(raw), null, 2); }
     catch(e) {}
   }
   document.getElementById('cloud-test-result').textContent = '';
+  showStudentLinkInModal();
   document.getElementById('modal-cloud').classList.remove('hidden');
 }
 
@@ -1448,9 +1529,10 @@ async function saveFirebaseConfig() {
     await db.collection('se_results').limit(1).get();
     localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(config));
     updateCloudBadge('connected');
-    status.innerHTML = '✅ <strong style="color:var(--green)">Berhasil terhubung ke Firebase!</strong><br>Hasil ujian peserta akan otomatis tersimpan ke cloud.';
+    showStudentLinkInModal();
+    status.innerHTML = '✅ <strong style="color:var(--green)">Berhasil terhubung ke Firebase!</strong><br>Hasil ujian peserta akan otomatis tersimpan ke cloud.'
+      + '<br><br>Salin link di bawah dan bagikan ke peserta — mereka tidak perlu konfigurasi apapun.';
     status.style.color = 'var(--green)';
-    setTimeout(() => closeModal('modal-cloud'), 2200);
   } catch(e) {
     let errMsg = e.message || String(e);
     let hint = '';
@@ -1837,8 +1919,9 @@ function renderExamList() {
           </div>
         </div>
         <div class="exam-card-actions">
+          <button class="btn btn-green btn-sm" onclick="event.stopPropagation();copyExamStudentLink('${exam.id}')" title="Salin link peserta untuk ujian ini">🔗</button>
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();manageAttempts('${exam.id}')" title="Kelola percobaan peserta">🔑</button>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportSingleExam('${exam.id}')" title="Export">⬆</button>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportSingleExam('${exam.id}')" title="Export JSON">⬆</button>
           <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openExamEditor('${exam.id}')">✏️ Edit</button>
           <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteExam('${exam.id}')">✕</button>
         </div>
