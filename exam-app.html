@@ -1,0 +1,3228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureExam — Sistem Ujian Aman</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --navy: #0a0f1e;
+    --navy-2: #111827;
+    --navy-3: #1c2a40;
+    --gold: #e8b84b;
+    --gold-dim: #a07c2a;
+    --red: #e84b4b;
+    --red-dim: #7a1f1f;
+    --green: #4be88a;
+    --green-dim: #1f7a45;
+    --white: #f0f4ff;
+    --muted: #8899bb;
+    --border: rgba(232,184,75,0.2);
+    --card: rgba(28,42,64,0.7);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--navy);
+    color: var(--white);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: 
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232,184,75,0.08) 0%, transparent 60%),
+      repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255,255,255,0.01) 40px, rgba(255,255,255,0.01) 41px),
+      repeating-linear-gradient(90deg, transparent, transparent 80px, rgba(255,255,255,0.01) 80px, rgba(255,255,255,0.01) 81px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .screen { position: relative; z-index: 1; min-height: 100vh; }
+
+  /* ── HIDDEN ── */
+  .hidden { display: none !important; }
+
+  /* ── HEADER ── */
+  .app-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 40px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,15,30,0.8);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--gold); letter-spacing: 1px; }
+  .logo span { color: var(--white); }
+  .header-meta { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 22px; border-radius: 6px; border: none;
+    font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; text-decoration: none;
+  }
+  .btn-gold { background: var(--gold); color: var(--navy); }
+  .btn-gold:hover { background: #f5ca6a; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(232,184,75,0.3); }
+  .btn-outline { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
+  .btn-outline:hover { background: rgba(232,184,75,0.1); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #ff6b6b; }
+  .btn-green { background: var(--green); color: var(--navy); }
+  .btn-green:hover { background: #6fffaa; }
+  .btn-ghost { background: rgba(255,255,255,0.06); color: var(--white); border: 1px solid rgba(255,255,255,0.1); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+  .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    backdrop-filter: blur(8px);
+  }
+
+  /* ── FORM ── */
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  input[type="text"], input[type="number"], input[type="password"], textarea, select {
+    width: 100%; padding: 10px 14px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--gold); }
+  textarea { resize: vertical; min-height: 80px; }
+  select option { background: var(--navy-2); }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.5px;
+  }
+  .badge-gold { background: rgba(232,184,75,0.15); color: var(--gold); border: 1px solid rgba(232,184,75,0.3); }
+  .badge-red { background: rgba(232,75,75,0.15); color: var(--red); border: 1px solid rgba(232,75,75,0.3); }
+  .badge-green { background: rgba(75,232,138,0.15); color: var(--green); border: 1px solid rgba(75,232,138,0.3); }
+
+  /* ════════════════════════════════════
+     LANDING SCREEN
+  ════════════════════════════════════ */
+  #screen-landing {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 40px 20px;
+  }
+  .landing-hero { text-align: center; max-width: 600px; margin-bottom: 60px; }
+  .landing-hero h1 { font-family: 'Playfair Display', serif; font-size: clamp(2.5rem,6vw,4rem); color: var(--gold); line-height: 1.1; margin-bottom: 16px; }
+  .landing-hero p { font-size: 1.05rem; color: var(--muted); line-height: 1.7; }
+  .landing-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 680px; width: 100%; }
+  @media(max-width:580px){ .landing-cards { grid-template-columns:1fr; } }
+  .landing-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 32px;
+    cursor: pointer; transition: all 0.25s;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+  }
+  .landing-card:hover { border-color: var(--gold); transform: translateY(-4px); box-shadow: 0 12px 40px rgba(232,184,75,0.15); }
+  .landing-card .icon { font-size: 2.2rem; }
+  .landing-card h2 { font-family: 'Playfair Display', serif; font-size: 1.25rem; color: var(--white); }
+  .landing-card p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+  /* ════════════════════════════════════
+     ADMIN SCREEN
+  ════════════════════════════════════ */
+  #screen-admin { padding: 0 0 60px; }
+  .admin-layout { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: 100vh; }
+  .admin-sidebar {
+    background: rgba(10,15,30,0.95); border-right: 1px solid var(--border);
+    padding: 32px 24px; display: flex; flex-direction: column; gap: 24px;
+    position: sticky; top: 65px; height: calc(100vh - 65px); overflow-y: auto;
+  }
+  .admin-main { padding: 32px 40px; }
+  .section-title { font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 20px; color: var(--gold); }
+  .sidebar-section h3 { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+  /* Questions list */
+  .q-list { display: flex; flex-direction: column; gap: 8px; }
+  .q-item {
+    padding: 10px 14px; background: rgba(255,255,255,0.04); border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.07); cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 10px; font-size: 0.85rem;
+  }
+  .q-item:hover { background: rgba(232,184,75,0.08); border-color: rgba(232,184,75,0.2); }
+  .q-item.active { background: rgba(232,184,75,0.12); border-color: var(--gold); }
+  .q-num { font-family:'DM Mono',monospace; font-size:0.75rem; color:var(--gold); min-width:24px; }
+  .q-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+  .q-del { background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;opacity:0.6;transition:opacity 0.15s; }
+  .q-del:hover { opacity:1; }
+
+  /* Question editor */
+  .q-editor { display: flex; flex-direction: column; gap: 20px; }
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .option-row { display: flex; gap: 8px; align-items: center; }
+  .option-label { font-family:'DM Mono',monospace; font-size:0.85rem; color:var(--gold); min-width:20px; }
+  .option-correct { width:20px; height:20px; accent-color: var(--green); cursor:pointer; }
+
+  /* Exam settings */
+  .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  /* AI panel */
+  .ai-panel { background: rgba(232,184,75,0.05); border: 1px solid rgba(232,184,75,0.2); border-radius:10px; padding:18px; }
+  .ai-panel h3 { font-size:0.85rem; font-weight:600; color:var(--gold); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+
+  /* ════════════════════════════════════
+     STUDENT ENTRY SCREEN
+  ════════════════════════════════════ */
+  #screen-entry {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 40px 20px;
+  }
+  .entry-box { max-width: 440px; width: 100%; }
+  .entry-box h1 { font-family: 'Playfair Display', serif; font-size: 1.8rem; color: var(--gold); margin-bottom: 8px; }
+  .entry-box .exam-name { font-size: 1rem; color: var(--muted); margin-bottom: 28px; }
+  .rules-box {
+    background: rgba(232,75,75,0.08); border: 1px solid rgba(232,75,75,0.25);
+    border-radius: 10px; padding: 18px; margin-bottom: 24px;
+  }
+  .rules-box h3 { font-size: 0.85rem; font-weight: 600; color: var(--red); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .rules-box ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .rules-box ul li { font-size: 0.85rem; color: var(--muted); display: flex; align-items: flex-start; gap: 8px; }
+  .rules-box ul li::before { content: '⚠'; font-size: 0.8rem; margin-top: 1px; }
+  .rules-check { display:flex; align-items:center; gap:10px; margin-bottom:20px; font-size:0.85rem; color:var(--muted); cursor:pointer; }
+  .rules-check input { accent-color: var(--gold); width:16px; height:16px; }
+
+  /* ════════════════════════════════════
+     EXAM SCREEN
+  ════════════════════════════════════ */
+  #screen-exam { min-height: 100vh; }
+  .exam-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 32px;
+    background: rgba(10,15,30,0.95); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .exam-info { display:flex; gap:32px; align-items:center; }
+  .exam-stat { text-align:center; }
+  .exam-stat .val { font-family:'DM Mono',monospace; font-size:1.2rem; font-weight:500; color:var(--gold); }
+  .exam-stat .key { font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+  .timer-warning .val { color: var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
+
+  .exam-body { display:grid; grid-template-columns:200px 1fr; min-height:calc(100vh - 63px); }
+  .q-nav {
+    background: rgba(10,15,30,0.7); border-right: 1px solid var(--border);
+    padding: 24px 16px; display:flex; flex-direction:column; gap:8px;
+    position: sticky; top: 63px; height: calc(100vh - 63px); overflow-y: auto;
+  }
+  .q-nav-item {
+    width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-family:'DM Mono',monospace; font-size:0.85rem; cursor:pointer;
+    border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
+    transition: all 0.15s;
+  }
+  .q-nav-item:hover { border-color: var(--gold); }
+  .q-nav-item.current { border-color: var(--gold); background: rgba(232,184,75,0.15); color: var(--gold); }
+  .q-nav-item.answered { background: rgba(75,232,138,0.15); border-color: var(--green); color: var(--green); }
+  .q-nav-wrap { display:flex; flex-wrap:wrap; gap:6px; }
+
+  .exam-content { padding: 40px; max-width: 800px; }
+  .q-header { margin-bottom: 28px; }
+  .q-counter { font-family:'DM Mono',monospace; font-size:0.8rem; color:var(--muted); margin-bottom:8px; }
+  .q-text { font-size: 1.15rem; line-height: 1.7; color: var(--white); }
+  .q-points { font-size:0.8rem; color:var(--gold); margin-top:6px; }
+
+  .options-list { display:flex; flex-direction:column; gap:12px; margin-top:24px; }
+  .option-btn {
+    display:flex; align-items:flex-start; gap:14px; padding:16px 18px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    border-radius:10px; cursor:pointer; transition: all 0.15s; text-align:left;
+  }
+  .option-btn:hover { border-color: rgba(232,184,75,0.4); background: rgba(232,184,75,0.06); }
+  .option-btn.selected { border-color: var(--gold); background: rgba(232,184,75,0.12); }
+  .option-key { font-family:'DM Mono',monospace; font-size:0.8rem; color:var(--gold); min-width:20px; margin-top:1px; }
+  .option-text { font-size:0.95rem; line-height:1.5; }
+
+  .essay-area { margin-top: 20px; }
+  .essay-area textarea { min-height:160px; }
+
+  .q-nav-btns { display:flex; gap:12px; margin-top:32px; }
+
+  /* ════════════════════════════════════
+     WARNING OVERLAY
+  ════════════════════════════════════ */
+  #warning-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(10,5,5,0.97);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 24px; text-align: center; padding: 40px;
+  }
+  #warning-overlay .warn-icon { font-size: 5rem; animation: shake 0.5s ease; }
+  @keyframes shake {
+    0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-10px)}80%{transform:translateX(10px)}
+  }
+  #warning-overlay h2 { font-family:'Playfair Display',serif; font-size:2rem; color:var(--red); }
+  #warning-overlay p { color:var(--muted); max-width:480px; line-height:1.7; }
+  .warn-count { font-family:'DM Mono',monospace; font-size:3rem; color:var(--red); font-weight:500; }
+  .warn-label { font-size:0.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+
+  /* ════════════════════════════════════
+     RESULT SCREEN
+  ════════════════════════════════════ */
+  #screen-result { padding: 60px 20px; display:flex; flex-direction:column; align-items:center; }
+  .result-box { max-width: 700px; width: 100%; }
+  .result-header { text-align:center; margin-bottom:40px; }
+  .result-header h1 { font-family:'Playfair Display',serif; font-size:2.5rem; color:var(--gold); }
+  .score-circle {
+    width:160px; height:160px; border-radius:50%;
+    border: 4px solid var(--gold); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; margin:24px auto;
+    background: radial-gradient(circle, rgba(232,184,75,0.1), transparent);
+  }
+  .score-num { font-family:'Playfair Display',serif; font-size:3rem; color:var(--gold); }
+  .score-label { font-size:0.8rem; color:var(--muted); }
+  .result-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:32px; }
+  .result-stat { text-align:center; padding:20px; background:var(--card); border:1px solid var(--border); border-radius:10px; }
+  .result-stat .val { font-family:'DM Mono',monospace; font-size:1.5rem; color:var(--gold); display:block; }
+  .result-stat .lbl { font-size:0.75rem; color:var(--muted); text-transform:uppercase; }
+  .violation-log { background:rgba(232,75,75,0.07); border:1px solid rgba(232,75,75,0.2); border-radius:10px; padding:20px; margin-bottom:24px; }
+  .violation-log h3 { color:var(--red); font-size:0.9rem; margin-bottom:12px; }
+  .viol-item { display:flex; align-items:center; gap:10px; font-size:0.82rem; color:var(--muted); padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .viol-item:last-child { border:none; }
+  .viol-time { font-family:'DM Mono',monospace; color:var(--gold); min-width:70px; }
+  .answers-detail { display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
+  .answer-item { padding:14px; background:var(--card); border:1px solid var(--border); border-radius:8px; }
+  .answer-item .q { font-size:0.85rem; color:var(--muted); margin-bottom:6px; }
+  .answer-item .a { font-size:0.9rem; color:var(--white); }
+  .answer-item.correct { border-color: rgba(75,232,138,0.3); }
+  .answer-item.wrong { border-color: rgba(232,75,75,0.3); }
+
+  /* ════════════════════════════════════
+     MODAL
+  ════════════════════════════════════ */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:500;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal { background:var(--navy-2); border:1px solid var(--border); border-radius:14px; padding:32px; max-width:500px; width:100%; }
+  .modal h2 { font-family:'Playfair Display',serif; color:var(--gold); margin-bottom:20px; }
+
+  /* Notification toast */
+  #toast {
+    position:fixed; bottom:30px; right:30px; z-index:9998;
+    background:var(--navy-3); border:1px solid var(--border);
+    border-radius:8px; padding:14px 20px; font-size:0.9rem;
+    transform:translateY(100px); opacity:0; transition:all 0.3s;
+    max-width:320px;
+  }
+  #toast.show { transform:translateY(0); opacity:1; }
+  #toast.toast-error { border-color:var(--red); color:var(--red); }
+  #toast.toast-ok { border-color:var(--green); color:var(--green); }
+
+  /* Progress bar */
+  .progress-bar { height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; margin-bottom:6px; }
+  .progress-fill { height:100%; background: linear-gradient(90deg, var(--gold), #f5ca6a); border-radius:2px; transition:width 0.3s; }
+
+  /* Spinner */
+  .spinner { width:20px;height:20px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite; }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .flex-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .mt-16 { margin-top:16px; }
+  .mt-8 { margin-top:8px; }
+  .divider { height:1px; background:var(--border); margin:20px 0; }
+
+  /* ── ADMIN TABS ── */
+  .admin-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    background: rgba(10,15,30,0.6); padding: 0 40px;
+  }
+  .admin-tab {
+    padding: 12px 24px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .admin-tab:hover { color: var(--white); }
+  .admin-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  /* ── DASHBOARD ── */
+  .dash-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+  @media(max-width:900px){ .dash-stats{grid-template-columns:repeat(2,1fr);} }
+  .dash-stat {
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:18px 20px; display:flex; flex-direction:column; gap:4px;
+  }
+  .dash-stat .ds-val { font-family:'DM Mono',monospace; font-size:1.8rem; color:var(--gold); font-weight:500; }
+  .dash-stat .ds-lbl { font-size:0.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+  .dash-stat .ds-sub { font-size:0.78rem; color:var(--muted); }
+
+  /* Table */
+  .data-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  .data-table th {
+    text-align:left; padding:10px 12px; font-size:0.72rem; font-weight:600;
+    color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;
+    border-bottom:1px solid var(--border); cursor:pointer; user-select:none;
+    white-space:nowrap;
+  }
+  .data-table th:hover { color:var(--gold); }
+  .data-table th .sort-icon { opacity:0.4; margin-left:4px; }
+  .data-table th.sort-asc .sort-icon::after { content:'↑'; opacity:1; }
+  .data-table th.sort-desc .sort-icon::after { content:'↓'; opacity:1; }
+  .data-table td {
+    padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04);
+    color:var(--white); vertical-align:middle;
+  }
+  .data-table tr:hover td { background:rgba(232,184,75,0.04); }
+  .data-table tr.selected-row td { background:rgba(232,184,75,0.08); }
+  .score-chip {
+    display:inline-block; padding:3px 10px; border-radius:20px;
+    font-family:'DM Mono',monospace; font-size:0.8rem; font-weight:600;
+  }
+  .score-high { background:rgba(75,232,138,0.15); color:var(--green); }
+  .score-mid  { background:rgba(232,184,75,0.15); color:var(--gold); }
+  .score-low  { background:rgba(232,75,75,0.15); color:var(--red); }
+
+  /* Kompeteni bar chart */
+  .komp-chart { display:flex; flex-direction:column; gap:10px; }
+  .komp-row { display:grid; grid-template-columns:180px 1fr 50px; gap:12px; align-items:center; }
+  .komp-label { font-size:0.8rem; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .komp-bar-wrap { height:8px; background:rgba(255,255,255,0.07); border-radius:4px; overflow:hidden; }
+  .komp-bar-fill { height:100%; border-radius:4px; transition:width 0.5s; }
+  .komp-pct { font-family:'DM Mono',monospace; font-size:0.78rem; color:var(--gold); text-align:right; }
+
+  /* Student detail panel */
+  .detail-panel {
+    background:var(--navy-2); border:1px solid var(--border); border-radius:12px;
+    padding:24px; margin-top:20px;
+  }
+  .detail-panel h3 { font-family:'Playfair Display',serif; color:var(--gold); margin-bottom:16px; font-size:1.1rem; }
+
+  /* Filter bar */
+  .filter-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .filter-bar input, .filter-bar select { padding:7px 12px; font-size:0.82rem; }
+
+  /* ── EXAM LIST ── */
+  .exam-list { display:flex; flex-direction:column; gap:8px; }
+  .exam-card {
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; display:flex; align-items:center; gap:12px;
+    transition:all 0.15s; cursor:pointer;
+  }
+  .exam-card:hover { border-color:rgba(232,184,75,0.4); }
+  .exam-card.active-exam { border-color:var(--gold); background:rgba(232,184,75,0.08); }
+  .exam-card-info { flex:1; min-width:0; }
+  .exam-card-name { font-weight:600; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .exam-card-meta { font-size:0.78rem; color:var(--muted); margin-top:2px; }
+  .exam-card-actions { display:flex; gap:6px; flex-shrink:0; }
+  .exam-status { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:4px; }
+  .exam-status.active { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .exam-status.draft { background:var(--muted); }
+
+  /* ── ATTEMPT BLOCKED ── */
+  .blocked-box {
+    background:rgba(232,75,75,0.08); border:1px solid rgba(232,75,75,0.3);
+    border-radius:12px; padding:28px; text-align:center; margin-top:16px;
+  }
+  .blocked-box h2 { font-family:'Playfair Display',serif; color:var(--red); font-size:1.4rem; margin-bottom:8px; }
+  .blocked-box p { color:var(--muted); font-size:0.9rem; line-height:1.6; }
+
+  /* ── ADMIN AUTH ── */
+  .auth-overlay {
+    position: fixed; inset: 0; z-index: 800;
+    background: rgba(5, 8, 18, 0.96);
+    backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .auth-box {
+    background: var(--navy-2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 36px;
+    max-width: 400px; width: 100%;
+    text-align: center;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  }
+  .auth-box .auth-icon { font-size: 2.8rem; margin-bottom: 16px; }
+  .auth-box h2 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 1.6rem; margin-bottom: 6px; }
+  .auth-box p { font-size: 0.85rem; color: var(--muted); margin-bottom: 24px; line-height: 1.6; }
+
+  .pin-dots {
+    display: flex; justify-content: center; gap: 12px; margin-bottom: 24px;
+  }
+  .pin-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--muted); background: transparent;
+    transition: all 0.15s;
+  }
+  .pin-dot.filled { background: var(--gold); border-color: var(--gold); }
+
+  .pin-pad {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    max-width: 260px; margin: 0 auto 16px;
+  }
+  .pin-key {
+    padding: 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    color: var(--white); font-size: 1.2rem; font-weight: 600;
+    cursor: pointer; transition: all 0.12s; user-select: none;
+    font-family: 'DM Mono', monospace;
+  }
+  .pin-key:hover { background: rgba(232,184,75,0.15); border-color: rgba(232,184,75,0.4); }
+  .pin-key:active { transform: scale(0.93); }
+  .pin-key.del { font-size: 1rem; color: var(--muted); }
+  .pin-key.wide { grid-column: span 3; }
+  .auth-error {
+    font-size: 0.82rem; color: var(--red);
+    min-height: 20px; margin-bottom: 8px;
+    animation: shake 0.35s ease;
+  }
+  .auth-step { font-size: 0.78rem; color: var(--muted); margin-top: 16px; }
+
+  /* ── CLOUD STATUS ── */
+  .cloud-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .cloud-badge.connected    { background: rgba(75,232,138,0.15); color: var(--green); border: 1px solid rgba(75,232,138,0.3); }
+  .cloud-badge.disconnected { background: rgba(136,153,187,0.15); color: var(--muted); border: 1px solid rgba(136,153,187,0.2); }
+  .cloud-badge.error        { background: rgba(232,75,75,0.15); color: var(--red); border: 1px solid rgba(232,75,75,0.3); }
+  .cloud-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .cloud-dot.pulse { animation: cloudpulse 1.5s infinite; }
+  @keyframes cloudpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── CLOUD SETUP MODAL ── */
+  .cloud-step {
+    display: flex; gap: 14px; padding: 14px; border-radius: 8px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+    margin-bottom: 12px;
+  }
+  .cloud-step-num {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--gold);
+    color: var(--navy); font-weight: 700; font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .cloud-step-body { flex: 1; }
+  .cloud-step-body h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 4px; }
+  .cloud-step-body p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+  .cloud-step-body a { color: var(--gold); text-decoration: none; }
+  .cloud-step-body a:hover { text-decoration: underline; }
+  .cloud-step-body code {
+    font-family: 'DM Mono', monospace; font-size: 0.78rem;
+    background: rgba(232,184,75,0.1); padding: 1px 5px; border-radius: 3px; color: var(--gold);
+  }
+
+  /* ── ATTEMPT TABLE ── */
+  .attempt-list { display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
+  .attempt-item {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.07); border-radius:6px; font-size:0.82rem;
+  }
+  .attempt-item .a-id { font-family:'DM Mono',monospace; color:var(--gold); }
+  .attempt-item .a-time { color:var(--muted); font-size:0.76rem; }
+
+  @media(max-width:768px){
+    .admin-layout { grid-template-columns:1fr; }
+    .admin-sidebar { position:static; height:auto; }
+    .exam-body { grid-template-columns:1fr; }
+    .q-nav { position:static; height:auto; flex-direction:row; flex-wrap:wrap; }
+    .settings-grid { grid-template-columns:1fr; }
+    .result-grid { grid-template-columns:1fr 1fr; }
+    .komp-row { grid-template-columns:120px 1fr 40px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LANDING
+══════════════════════════════════════ -->
+<div id="screen-landing" class="screen">
+  <!-- file:// protocol warning -->
+  <div id="file-protocol-warning" class="hidden" style="background:rgba(232,184,75,0.12);border-bottom:1px solid rgba(232,184,75,0.3);padding:12px 24px;text-align:center;font-size:0.83rem">
+    ⚠️ <strong>Perhatian:</strong> File ini dibuka langsung dari komputer (<code>file://</code>).
+    Fitur cloud tidak akan berfungsi. Untuk mengaktifkan cloud, buka file lewat server lokal atau hosting.
+    <a href="#" onclick="showFileProtocolHelp();return false" style="color:var(--gold);margin-left:8px">Cara memperbaiki →</a>
+  </div>
+  <div class="landing-hero">
+    <div style="font-size:3rem;margin-bottom:16px">🔒</div>
+    <h1>SecureExam</h1>
+    <p>Sistem ujian online dengan perlindungan anti-kecurangan berbasis AI. Deteksi perpindahan tab, paksa layar penuh, dan pantau perilaku peserta secara real-time.</p>
+  </div>
+  <div class="landing-cards">
+    <div class="landing-card" onclick="goAdmin()">
+      <div class="icon">⚙️</div>
+      <h2>Panel Admin</h2>
+      <p>Buat soal ujian, konfigurasi pengaturan, dan lihat laporan hasil ujian peserta.</p>
+      <span class="badge badge-gold">Pengelola Ujian</span>
+    </div>
+    <div class="landing-card" onclick="goEntry()">
+      <div class="icon">📝</div>
+      <h2>Mulai Ujian</h2>
+      <p>Masukkan kode ujian dan ikuti ujian dalam mode aman dengan pemantauan aktif.</p>
+      <span class="badge badge-green">Peserta</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     ADMIN SCREEN
+══════════════════════════════════════ -->
+<div id="screen-admin" class="screen hidden">
+  <div class="app-header">
+    <div class="logo">Secure<span>Exam</span> <span style="font-size:0.7rem;color:var(--muted);font-family:'DM Mono',monospace;margin-left:8px">ADMIN</span></div>
+    <div class="flex-row">
+      <div id="cloud-status-badge" class="cloud-badge disconnected" onclick="openCloudSetup()" title="Klik untuk setup koneksi cloud">
+        <div class="cloud-dot"></div><span>Cloud: Tidak Aktif</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="downloadExcelAll()">📊 Download Hasil</button>
+      <button class="btn btn-ghost btn-sm" onclick="changeAdminPin()" title="Ganti PIN Admin">🔑 Ganti PIN</button>
+      <button class="btn btn-outline btn-sm" onclick="logoutAdmin()">⏻ Keluar</button>
+    </div>
+  </div>
+  <div class="admin-tabs">
+    <div class="admin-tab active" id="tab-ujian" onclick="switchAdminTab('ujian')">📚 Kelola Ujian <span id="tab-ujian-badge" class="badge badge-gold" style="display:none">0</span></div>
+    <div class="admin-tab" id="tab-soal" onclick="switchAdminTab('soal')">✏️ Editor Soal</div>
+    <div class="admin-tab" id="tab-hasil" onclick="switchAdminTab('hasil')">📊 Hasil Ujian <span id="tab-hasil-badge" style="display:none;margin-left:4px" class="badge badge-gold">0</span></div>
+  </div>
+
+  <!-- ── KELOLA UJIAN PANEL ── -->
+  <div id="admin-ujian-panel" class="hidden" style="padding:32px 40px;max-width:900px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+      <div class="section-title" style="margin:0">📚 Daftar Ujian</div>
+      <div class="flex-row">
+        <button class="btn btn-ghost btn-sm" onclick="openImport()">📁 Import JSON</button>
+        <button class="btn btn-gold" onclick="newExam()">+ Buat Ujian Baru</button>
+      </div>
+    </div>
+    <div id="exam-list-wrap" class="exam-list">
+      <div style="color:var(--muted);font-size:0.85rem;padding:40px;text-align:center">
+        Belum ada ujian. Klik "+ Buat Ujian Baru" untuk memulai.
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-layout">
+    <!-- Sidebar (soal tab only) -->
+    <div class="admin-sidebar" id="admin-sidebar-panel">
+      <div class="sidebar-section">
+        <h3>📋 Pengaturan Ujian</h3>
+        <div class="form-group">
+          <label>Nama Ujian</label>
+          <input type="text" id="exam-name" placeholder="contoh: UTS Matematika Kelas X">
+        </div>
+        <div class="form-group">
+          <label>Kode Ujian (PIN)</label>
+          <input type="text" id="exam-code" placeholder="contoh: MTK2025">
+        </div>
+        <div class="form-group">
+          <label>Durasi (menit)</label>
+          <input type="number" id="exam-duration" value="60" min="1" max="480">
+        </div>
+        <div class="form-group">
+          <label>Maks. Peringatan sebelum dikeluarkan</label>
+          <input type="number" id="exam-maxwarn" value="3" min="1" max="10">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section">
+        <h3>🛡 Anti-Kecurangan</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-fullscreen" checked style="accent-color:var(--gold)"> Wajib layar penuh
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-tabdetect" checked style="accent-color:var(--gold)"> Deteksi pindah tab
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-copyblock" checked style="accent-color:var(--gold)"> Blokir copy-paste
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-rightclick" checked style="accent-color:var(--gold)"> Blokir klik kanan
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-devtools" checked style="accent-color:var(--gold)"> Deteksi Developer Tools
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-screenshot" checked style="accent-color:var(--gold)"> Deteksi Print Screen
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:0.85rem;color:var(--white)">
+            <input type="checkbox" id="ac-shuffle" style="accent-color:var(--gold)"> Acak urutan soal
+          </label>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="sidebar-section">
+        <h3>📊 Ringkasan</h3>
+        <div style="font-size:0.85rem;color:var(--muted);line-height:2">
+          Soal: <span id="s-qcount" style="color:var(--gold)">0</span><br>
+          Total Poin: <span id="s-points" style="color:var(--gold)">0</span><br>
+          Durasi: <span id="s-dur" style="color:var(--gold)">60</span> menit
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="admin-main" id="admin-main-panel">
+      <div class="flex-row" style="justify-content:space-between;margin-bottom:24px">
+        <div class="section-title" style="margin:0">✏️ Manajemen Soal</div>
+        <div class="flex-row">
+          <button class="btn btn-ghost btn-sm" onclick="openImport()">📁 Import JSON</button>
+          <button class="btn btn-outline btn-sm" onclick="openAiGen()">🤖 Generate AI</button>
+          <button class="btn btn-gold btn-sm" onclick="addQuestion()">+ Tambah Soal</button>
+        </div>
+      </div>
+
+      <!-- Question editor area -->
+      <div id="q-editor-area">
+        <div style="text-align:center;padding:80px;color:var(--muted)">
+          <div style="font-size:3rem;margin-bottom:16px">📝</div>
+          <p>Klik "+ Tambah Soal" untuk mulai membuat soal ujian,<br>atau gunakan "🤖 Generate AI" untuk generate otomatis.</p>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Question list -->
+      <div class="section-title">📋 Daftar Soal (<span id="q-total">0</span>)</div>
+      <div id="q-list" class="q-list">
+        <div style="color:var(--muted);font-size:0.85rem">Belum ada soal.</div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="flex-row">
+        <button class="btn btn-gold" onclick="saveAndPreview()">💾 Simpan & Preview Ujian</button>
+        <button class="btn btn-ghost" onclick="clearAll()">🗑 Bersihkan Semua</button>
+      </div>
+    </div>
+
+    <!-- ── DASHBOARD HASIL (hidden by default) ── -->
+    <div id="admin-dashboard" class="hidden" style="grid-column:1/-1;padding:32px 40px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+        <div class="section-title" style="margin:0">📊 Dashboard Hasil Ujian</div>
+        <div class="flex-row">
+          <button class="btn btn-gold btn-sm" onclick="downloadExcelAll()">📥 Download Excel</button>
+          <button class="btn btn-ghost btn-sm" onclick="renderDashboard()">🔄 Refresh</button>
+          <button class="btn btn-danger btn-sm" onclick="clearResultsAdmin()">🗑 Hapus Semua Data</button>
+        </div>
+      </div>
+
+      <!-- Summary stats -->
+      <div class="dash-stats" id="dash-stats"></div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <select id="dash-filter-exam" onchange="renderDashboard()" style="min-width:200px">
+          <option value="">Semua Ujian</option>
+        </select>
+        <input type="text" id="dash-search" placeholder="🔍 Cari nama / NIM..." style="width:220px" oninput="renderStudentTable()">
+        <select id="dash-filter-score" onchange="renderStudentTable()">
+          <option value="">Semua Nilai</option>
+          <option value="high">Nilai ≥ 80</option>
+          <option value="mid">Nilai 60–79</option>
+          <option value="low">Nilai &lt; 60</option>
+        </select>
+        <select id="dash-filter-viol" onchange="renderStudentTable()">
+          <option value="">Semua Peserta</option>
+          <option value="clean">Tanpa Pelanggaran</option>
+          <option value="viol">Ada Pelanggaran</option>
+        </select>
+      </div>
+
+      <!-- Student table -->
+      <div class="card" style="padding:0;overflow:auto;margin-bottom:24px">
+        <table class="data-table" id="dash-table">
+          <thead>
+            <tr>
+              <th onclick="sortTable('id')">No. Peserta <span class="sort-icon"></span></th>
+              <th onclick="sortTable('name')">Nama <span class="sort-icon"></span></th>
+              <th>Ujian</th>
+              <th onclick="sortTable('score')">Nilai <span class="sort-icon"></span></th>
+              <th onclick="sortTable('correct')">✅ Benar</th>
+              <th onclick="sortTable('wrong')">❌ Salah</th>
+              <th onclick="sortTable('unanswered')">⭕ Kosong</th>
+              <th onclick="sortTable('warnCount')">⚠️ Pelanggaran</th>
+              <th>Waktu Submit</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="dash-tbody"></tbody>
+        </table>
+        <div id="dash-empty" class="hidden" style="padding:48px;text-align:center;color:var(--muted)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📭</div>
+          <p>Belum ada data hasil ujian tersimpan.</p>
+          <p style="font-size:0.82rem;margin-top:6px">Data akan muncul setelah peserta menyelesaikan ujian di perangkat ini.</p>
+        </div>
+      </div>
+
+      <!-- Student detail (shown when row clicked) -->
+      <div id="dash-detail" class="hidden">
+        <div class="detail-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+            <h3 id="dd-name">—</h3>
+            <button class="btn btn-ghost btn-sm" onclick="closeDashDetail()">✕ Tutup</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="dd-stats"></div>
+
+          <!-- Violation log -->
+          <div id="dd-viol-wrap" style="margin-bottom:20px"></div>
+
+          <!-- Per-competency breakdown -->
+          <div id="dd-komp-wrap" style="margin-bottom:20px"></div>
+
+          <!-- Answer list -->
+          <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Detail Jawaban</div>
+          <div style="overflow:auto;max-height:400px">
+            <table class="data-table" id="dd-answers">
+              <thead>
+                <tr>
+                  <th>#</th><th>Elemen Kompetensi</th><th>Soal</th><th>Tipe</th>
+                  <th>Jawaban</th><th>Kunci</th><th>Status</th><th>Poin</th>
+                </tr>
+              </thead>
+              <tbody id="dd-answers-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Competency aggregate chart (all students) -->
+      <div id="dash-komp-section" class="card" style="margin-top:24px">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--gold);margin-bottom:16px">🏷 Analitik Elemen Kompetensi — Semua Peserta</div>
+        <div id="dash-komp-chart" class="komp-chart"></div>
+      </div>
+    </div>
+  </div><!-- /.admin-layout -->
+</div><!-- /#screen-admin -->
+
+<!-- ══════════════════════════════════════
+     STUDENT ENTRY SCREEN
+══════════════════════════════════════ -->
+<div id="screen-entry" class="screen hidden">
+  <div class="entry-box">
+    <div style="font-size:2.5rem;margin-bottom:12px">🔐</div>
+    <h1>Masuk Ujian</h1>
+    <p class="exam-name" id="entry-exam-title">Masukkan kode ujian untuk melanjutkan</p>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="form-group">
+        <label>Nama Lengkap</label>
+        <input type="text" id="student-name" placeholder="Nama sesuai kartu identitas">
+      </div>
+      <div class="form-group">
+        <label>No. Peserta / NIM / NIS</label>
+        <input type="text" id="student-id" placeholder="contoh: 2024001">
+      </div>
+      <div class="form-group">
+        <label>Kode Ujian</label>
+        <input type="text" id="entry-code" placeholder="Masukkan kode dari pengawas" style="text-transform:uppercase;letter-spacing:2px">
+      </div>
+    </div>
+
+    <div class="rules-box">
+      <h3>⚠️ Peraturan Ujian</h3>
+      <ul>
+        <li>Dilarang berpindah tab atau jendela browser selama ujian berlangsung</li>
+        <li>Dilarang menggunakan fitur copy-paste atau klik kanan</li>
+        <li>Dilarang menggunakan Developer Tools atau fitur Inspect</li>
+        <li>Dilarang mengambil screenshot selama ujian</li>
+        <li>Ujian akan berjalan dalam mode layar penuh</li>
+        <li>Setiap pelanggaran akan dicatat dan dilaporkan kepada pengawas</li>
+        <li>Pelanggaran melebihi batas akan mengakhiri ujian secara otomatis</li>
+      </ul>
+    </div>
+
+    <label class="rules-check">
+      <input type="checkbox" id="rules-agree">
+      Saya memahami dan menyetujui peraturan ujian di atas
+    </label>
+
+    <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="startExam()">
+      Mulai Ujian →
+    </button>
+    <div id="entry-blocked" class="blocked-box hidden">
+      <div style="font-size:2.5rem;margin-bottom:12px">🚫</div>
+      <h2>Akses Ditolak</h2>
+      <p id="entry-blocked-msg">Anda sudah pernah mengikuti ujian ini. Setiap peserta hanya diizinkan satu kali percobaan. Hubungi pengawas jika ada kesalahan.</p>
+    </div>
+    <div style="margin-top:16px;text-align:center">
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('landing')">← Kembali</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     EXAM SCREEN
+══════════════════════════════════════ -->
+<div id="screen-exam" class="screen hidden">
+  <div class="exam-topbar">
+    <div class="logo">🔒 SecureExam</div>
+    <div class="exam-info">
+      <div class="exam-stat">
+        <div class="val" id="timer-display">60:00</div>
+        <div class="key">Waktu</div>
+      </div>
+      <div class="exam-stat">
+        <div class="val" id="q-progress">0/0</div>
+        <div class="key">Dijawab</div>
+      </div>
+      <div class="exam-stat">
+        <div class="val" id="warn-display" style="color:var(--red)">0</div>
+        <div class="key">Peringatan</div>
+      </div>
+    </div>
+    <button class="btn btn-danger btn-sm" onclick="confirmSubmit()">Submit Ujian ✓</button>
+  </div>
+
+  <div class="exam-body">
+    <div class="q-nav">
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Navigasi</div>
+      <div id="q-nav-wrap" class="q-nav-wrap"></div>
+    </div>
+    <div class="exam-content">
+      <div id="q-header" class="q-header">
+        <div class="q-counter" id="q-counter"></div>
+        <div class="progress-bar"><div class="progress-fill" id="q-progress-bar" style="width:0%"></div></div>
+        <div class="q-text" id="q-text"></div>
+        <div class="q-points" id="q-points"></div>
+      </div>
+      <div id="q-answer-area"></div>
+      <div class="q-nav-btns">
+        <button class="btn btn-ghost" id="btn-prev" onclick="prevQ()">← Sebelumnya</button>
+        <button class="btn btn-gold" id="btn-next" onclick="nextQ()">Selanjutnya →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     RESULT SCREEN
+══════════════════════════════════════ -->
+<div id="screen-result" class="screen hidden">
+  <div class="result-box">
+    <div class="result-header">
+      <div style="font-size:3rem">🏆</div>
+      <h1>Ujian Selesai</h1>
+      <p id="result-name" style="color:var(--muted);margin-top:8px"></p>
+      <div class="score-circle">
+        <div class="score-num" id="result-score">—</div>
+        <div class="score-label">Nilai</div>
+      </div>
+    </div>
+
+    <div class="result-grid">
+      <div class="result-stat">
+        <span class="val" id="r-correct">—</span>
+        <span class="lbl">✅ Benar</span>
+      </div>
+      <div class="result-stat">
+        <span class="val" id="r-wrong">—</span>
+        <span class="lbl">❌ Salah</span>
+      </div>
+      <div class="result-stat">
+        <span class="val" id="r-unanswered">—</span>
+        <span class="lbl">⭕ Kosong</span>
+      </div>
+    </div>
+
+    <div class="violation-log">
+      <h3>🚨 Log Pelanggaran (<span id="r-viol-count">0</span>)</h3>
+      <div id="r-viol-list"><div style="color:var(--muted);font-size:0.85rem">Tidak ada pelanggaran tercatat ✅</div></div>
+    </div>
+
+    <div id="r-answers-detail" class="answers-detail"></div>
+
+    <div class="flex-row" style="justify-content:center">
+      <button class="btn btn-gold" onclick="downloadExcelSingle()">📥 Download Excel (Peserta Ini)</button>
+      <button class="btn btn-ghost" onclick="printResult()">🖨 Cetak Laporan</button>
+      <button class="btn btn-ghost" onclick="showScreen('landing')">🏠 Kembali</button>
+    </div>
+    <div id="r-cloud-status" style="text-align:center;margin-top:12px;font-size:0.85rem"></div>
+
+    <div style="margin-top:32px;padding:20px;background:rgba(232,184,75,0.06);border:1px solid var(--border);border-radius:10px">
+      <div style="font-size:0.8rem;font-weight:600;color:var(--gold);margin-bottom:8px">⚙️ Aksi Admin</div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px">Lihat rekap lengkap semua peserta di Panel Admin → Tab Hasil Ujian.</p>
+      <button class="btn btn-gold btn-sm" onclick="goAdmin();switchAdminTab('hasil')">📊 Buka Dashboard Hasil</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     WARNING OVERLAY
+══════════════════════════════════════ -->
+<div id="warning-overlay" class="hidden">
+  <div class="warn-icon">🚨</div>
+  <h2>PELANGGARAN TERDETEKSI!</h2>
+  <p id="warn-message">Anda terdeteksi meninggalkan halaman ujian. Tindakan ini dicatat dan dilaporkan.</p>
+  <div>
+    <div class="warn-count" id="warn-count-display">1</div>
+    <div class="warn-label">dari <span id="warn-max">3</span> peringatan</div>
+  </div>
+  <button class="btn btn-gold" onclick="dismissWarning()">Saya Mengerti — Lanjutkan Ujian</button>
+</div>
+
+<!-- MODAL: AI Generate -->
+<div id="modal-ai" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>🤖 Generate Soal dengan AI</h2>
+    <div class="form-group">
+      <label>Mata Pelajaran / Topik</label>
+      <input type="text" id="ai-topic" placeholder="contoh: Trigonometri SMA, Hukum Newton, Sejarah Indonesia">
+    </div>
+    <div class="form-group">
+      <label>Tingkat Kesulitan</label>
+      <select id="ai-level">
+        <option value="mudah">Mudah</option>
+        <option value="sedang" selected>Sedang</option>
+        <option value="sulit">Sulit</option>
+      </select>
+    </div>
+    <div class="settings-grid">
+      <div class="form-group">
+        <label>Jumlah Soal Pilihan Ganda</label>
+        <input type="number" id="ai-mc-count" value="5" min="0" max="20">
+      </div>
+      <div class="form-group">
+        <label>Jumlah Soal Essay</label>
+        <input type="number" id="ai-essay-count" value="2" min="0" max="10">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Instruksi Tambahan (opsional)</label>
+      <textarea id="ai-extra" placeholder="contoh: Fokus pada materi bab 3, gunakan konteks Indonesia..."></textarea>
+    </div>
+    <div class="flex-row mt-16">
+      <button class="btn btn-gold" id="ai-gen-btn" onclick="generateAI()">✨ Generate Soal</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-ai')">Batal</button>
+    </div>
+    <div id="ai-status" style="margin-top:12px;font-size:0.85rem;color:var(--muted)"></div>
+  </div>
+</div>
+
+<!-- MODAL: Import -->
+<div id="modal-import" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>📁 Import Soal (JSON)</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px">Tempel data JSON soal di bawah ini. Format: array objek soal.</p>
+    <textarea id="import-json" style="min-height:200px;font-family:'DM Mono',monospace;font-size:0.8rem" placeholder='[{"type":"mc","text":"Soal?","options":["A","B","C","D"],"correct":0,"points":10}]'></textarea>
+    <div class="flex-row mt-16">
+      <button class="btn btn-gold" onclick="importJSON()">Import</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-import')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Manage Attempts -->
+<div id="modal-attempts" class="modal-overlay hidden">
+  <div class="modal" style="max-width:560px">
+    <h2>🔑 Kelola Percobaan Ujian</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:4px">Ujian: <strong id="ma-exam-name" style="color:var(--white)"></strong></p>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:20px">Peserta yang terdaftar di bawah ini sudah pernah mengikuti ujian dan tidak bisa ikut lagi. Admin bisa hapus data percobaan untuk mengizinkan peserta ikut ulang.</p>
+    <div id="ma-list" class="attempt-list" style="margin-bottom:16px"></div>
+    <div class="flex-row">
+      <button class="btn btn-danger btn-sm" onclick="resetAllAttemptsModal()">🗑 Reset Semua Peserta</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-attempts')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Confirm Delete Exam -->
+<div id="modal-del-exam" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Hapus Ujian?</h2>
+    <p style="color:var(--muted);margin-bottom:20px">Ujian "<span id="del-exam-name" style="color:var(--white)"></span>" akan dihapus permanen beserta semua data percobaan pesertanya. Hasil ujian tetap tersimpan.</p>
+    <div class="flex-row">
+      <button class="btn btn-danger" id="del-exam-confirm">Ya, Hapus</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-del-exam')">Batal</button>
+    </div>
+  </div>
+</div>
+<div id="modal-submit" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Submit Ujian?</h2>
+    <p style="color:var(--muted);margin-bottom:8px">Pastikan Anda sudah menjawab semua soal sebelum submit.</p>
+    <div id="submit-summary" style="margin:16px 0;font-size:0.9rem;color:var(--muted)"></div>
+    <div class="flex-row">
+      <button class="btn btn-gold" onclick="submitExam()">✓ Ya, Submit Ujian</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-submit')">Lanjut Mengerjakan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     FILE PROTOCOL HELP MODAL
+══════════════════════════════════════ -->
+<div id="modal-file-protocol" class="modal-overlay hidden">
+  <div class="modal" style="max-width:580px">
+    <h2>🌐 Cara Menjalankan via HTTP</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:20px">
+      Firebase membutuhkan akses lewat <code>http://</code> atau <code>https://</code>, bukan <code>file://</code>.
+      Pilih salah satu cara berikut:
+    </p>
+
+    <div class="cloud-step">
+      <div class="cloud-step-num">A</div>
+      <div class="cloud-step-body">
+        <h4>Python (sudah terinstall di hampir semua komputer)</h4>
+        <p>Buka Terminal / Command Prompt, masuk ke folder tempat file berada, lalu jalankan:</p>
+        <pre style="background:rgba(0,0,0,0.4);padding:10px;border-radius:6px;margin-top:8px;font-size:0.82rem;color:var(--gold)">cd /path/ke/folder/file
+python -m http.server 8080</pre>
+        <p style="margin-top:6px">Lalu buka browser dan akses: <code>http://localhost:8080/exam-app.html</code><br>
+        Bagikan alamat ini ke peserta di jaringan yang sama: <code>http://[IP-komputer-Anda]:8080/exam-app.html</code></p>
+      </div>
+    </div>
+
+    <div class="cloud-step">
+      <div class="cloud-step-num">B</div>
+      <div class="cloud-step-body">
+        <h4>VS Code + Live Server (untuk pengguna VS Code)</h4>
+        <p>Install ekstensi <strong>Live Server</strong> dari Ritwick Dey → klik kanan file <code>exam-app.html</code> → pilih <strong>"Open with Live Server"</strong>. Browser akan terbuka otomatis.</p>
+      </div>
+    </div>
+
+    <div class="cloud-step">
+      <div class="cloud-step-num">C</div>
+      <div class="cloud-step-body">
+        <h4>Netlify Drop (hosting gratis, paling mudah untuk peserta jarak jauh)</h4>
+        <p>Buka <a href="https://app.netlify.com/drop" target="_blank">app.netlify.com/drop</a> → drag & drop file <code>exam-app.html</code> ke halaman tersebut → Netlify akan memberi URL publik yang bisa diakses dari mana saja, misalnya <code>https://amazing-name-123.netlify.app</code>.</p>
+      </div>
+    </div>
+
+    <div class="cloud-step" style="background:rgba(75,232,138,0.06);border-color:rgba(75,232,138,0.2)">
+      <div class="cloud-step-num" style="background:var(--green)">✓</div>
+      <div class="cloud-step-body">
+        <h4>Rekomendasi untuk Lab Komputer</h4>
+        <p>Jalankan Python server di komputer admin/pengawas, lalu peserta akses lewat IP komputer admin di jaringan LAN yang sama. Semua peserta pakai satu URL yang sama — tidak perlu copy file ke tiap komputer.</p>
+      </div>
+    </div>
+
+    <button class="btn btn-gold" onclick="closeModal('modal-file-protocol')" style="margin-top:8px">Mengerti</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     CLOUD SETUP MODAL
+══════════════════════════════════════ -->
+<div id="modal-cloud" class="modal-overlay hidden">
+  <div class="modal" style="max-width:600px;max-height:90vh;overflow-y:auto">
+    <h2>☁️ Koneksi Cloud (Firebase)</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:20px">
+      Hubungkan aplikasi ke Firebase Firestore agar hasil ujian peserta langsung tersimpan di cloud
+      dan bisa Anda akses dari perangkat mana pun.
+    </p>
+
+    <!-- Setup steps -->
+    <div id="cloud-setup-steps">
+      <div class="cloud-step">
+        <div class="cloud-step-num">1</div>
+        <div class="cloud-step-body">
+          <h4>Buka Firebase Console</h4>
+          <p>Buka <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> → Login dengan akun Google → Klik <strong>"Add project"</strong> → beri nama (misal: <em>SecureExam-Sekolah</em>) → klik Continue hingga selesai.</p>
+        </div>
+      </div>
+      <div class="cloud-step">
+        <div class="cloud-step-num">2</div>
+        <div class="cloud-step-body">
+          <h4>Aktifkan Firestore Database</h4>
+          <p>Di menu kiri pilih <strong>Build → Firestore Database</strong> → klik <strong>"Create database"</strong> → pilih <strong>"Start in test mode"</strong> → pilih region terdekat (misal: <code>asia-southeast1</code>) → klik Enable.</p>
+        </div>
+      </div>
+      <div class="cloud-step">
+        <div class="cloud-step-num">3</div>
+        <div class="cloud-step-body">
+          <h4>Daftarkan Aplikasi Web</h4>
+          <p>Di Project Overview → klik ikon <strong>&lt;/&gt;</strong> (Web) → beri nama app → klik <strong>"Register app"</strong>. Firebase akan menampilkan blok kode berisi <code>firebaseConfig</code>. Salin seluruh isi objek <code>{ apiKey: ..., projectId: ..., ... }</code> lalu tempel di kolom di bawah ini.</p>
+        </div>
+      </div>
+      <div class="cloud-step">
+        <div class="cloud-step-num">4</div>
+        <div class="cloud-step-body">
+          <h4>Atur Security Rules (Penting!)</h4>
+          <p>Di Firestore → tab <strong>Rules</strong> → ganti isi rules dengan kode berikut lalu klik <strong>Publish</strong>:</p>
+          <pre style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;font-size:0.75rem;margin-top:8px;overflow-x:auto;color:var(--gold)">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /se_results/{doc} {
+      allow write: if true;
+      allow read: if true;
+    }
+    match /se_attempts/{doc} {
+      allow read, write: if true;
+    }
+  }
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:16px">
+      <label>Tempel Firebase Config di sini</label>
+      <textarea id="firebase-config-input" rows="8" style="font-family:'DM Mono',monospace;font-size:0.78rem"
+        placeholder='{&#10;  "apiKey": "AIza...",&#10;  "authDomain": "nama-project.firebaseapp.com",&#10;  "projectId": "nama-project",&#10;  "storageBucket": "nama-project.appspot.com",&#10;  "messagingSenderId": "123456789",&#10;  "appId": "1:123:web:abc..."&#10;}'></textarea>
+    </div>
+    <div id="cloud-test-result" style="font-size:0.83rem;min-height:20px;margin-bottom:12px"></div>
+    <div class="flex-row">
+      <button class="btn btn-gold" id="cloud-save-btn" onclick="saveFirebaseConfig()">💾 Simpan & Hubungkan</button>
+      <button class="btn btn-ghost btn-sm" onclick="disconnectCloud()">Putuskan Koneksi</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-cloud')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     ADMIN AUTH OVERLAY
+══════════════════════════════════════ -->
+<div id="admin-auth-overlay" class="auth-overlay hidden">
+  <div class="auth-box">
+    <div class="auth-icon">🔐</div>
+    <h2 id="auth-title">Akses Admin</h2>
+    <p id="auth-desc">Masukkan PIN admin untuk melanjutkan.</p>
+
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="dot-0"></div>
+      <div class="pin-dot" id="dot-1"></div>
+      <div class="pin-dot" id="dot-2"></div>
+      <div class="pin-dot" id="dot-3"></div>
+    </div>
+
+    <div class="auth-error" id="auth-error"></div>
+
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinPress('1')">1</button>
+      <button class="pin-key" onclick="pinPress('2')">2</button>
+      <button class="pin-key" onclick="pinPress('3')">3</button>
+      <button class="pin-key" onclick="pinPress('4')">4</button>
+      <button class="pin-key" onclick="pinPress('5')">5</button>
+      <button class="pin-key" onclick="pinPress('6')">6</button>
+      <button class="pin-key" onclick="pinPress('7')">7</button>
+      <button class="pin-key" onclick="pinPress('8')">8</button>
+      <button class="pin-key" onclick="pinPress('9')">9</button>
+      <button class="pin-key del" onclick="pinClear()">✕ Hapus</button>
+      <button class="pin-key" onclick="pinPress('0')">0</button>
+      <button class="pin-key del" onclick="pinBackspace()">⌫</button>
+    </div>
+
+    <div id="auth-step" class="auth-step"></div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="cancelAdminAuth()">Batal</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let allExams    = [];    // All saved exams [{id,name,code,duration,maxWarnings,ac,questions}]
+let activeExamId = null; // ID of exam currently being edited
+let questions   = [];    // Questions for exam being edited
+let examConfig  = {};    // Active exam config during student exam
+let studentInfo = {};    // Current student
+let answers     = {};    // Current answers { qIndex: value }
+let violations  = [];    // Violation log
+let warnCount   = 0;
+let currentQ    = 0;
+let timerInterval = null;
+let timeLeft    = 0;
+let examActive  = false;
+let acSettings  = {};
+let qOrder      = [];    // Possibly shuffled question order
+
+// ── Attempt tracking helpers ──────────────
+function attemptKey(examCode, studentId) {
+  return examCode.trim().toUpperCase() + '__' + studentId.trim().toLowerCase();
+}
+function hasAttempted(examCode, studentId) {
+  try {
+    const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
+    return !!a[attemptKey(examCode, studentId)];
+  } catch(e) { return false; }
+}
+function recordAttempt(examCode, studentId) {
+  try {
+    const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
+    a[attemptKey(examCode, studentId)] = new Date().toLocaleString('id-ID');
+    localStorage.setItem('secureexam_attempts', JSON.stringify(a));
+  } catch(e) {}
+}
+function getAttemptsForExam(examCode) {
+  try {
+    const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
+    const prefix = examCode.trim().toUpperCase() + '__';
+    return Object.entries(a)
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([k, time]) => ({ studentId: k.replace(prefix, ''), time }));
+  } catch(e) { return []; }
+}
+function deleteAttempt(examCode, studentId) {
+  try {
+    const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
+    delete a[attemptKey(examCode, studentId)];
+    localStorage.setItem('secureexam_attempts', JSON.stringify(a));
+  } catch(e) {}
+}
+function resetAllAttempts(examCode) {
+  try {
+    const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
+    const prefix = examCode.trim().toUpperCase() + '__';
+    Object.keys(a).filter(k => k.startsWith(prefix)).forEach(k => delete a[k]);
+    localStorage.setItem('secureexam_attempts', JSON.stringify(a));
+  } catch(e) {}
+}
+
+// ── Exam storage helpers ──────────────────
+function loadAllExams() {
+  try { allExams = JSON.parse(localStorage.getItem('secureexam_exams') || '[]'); }
+  catch(e) { allExams = []; }
+}
+function saveAllExams() {
+  localStorage.setItem('secureexam_exams', JSON.stringify(allExams));
+}
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function findExamByCode(code) {
+  return allExams.find(e => e.code === code.trim().toUpperCase()) || null;
+}
+
+// ══════════════════════════════════════════
+// FIREBASE CLOUD INTEGRATION
+// ══════════════════════════════════════════
+const FB_CONFIG_KEY = 'secureexam_firebase_config';
+let db = null; // Firestore instance
+
+// ── Init ─────────────────────────────────
+async function initFirebase(config) {
+  try {
+    // Await delete of existing named app to avoid re-init race condition
+    const existing = firebase.apps.find(a => a.name === 'secureexam');
+    if (existing) await existing.delete();
+
+    const app = firebase.initializeApp(config, 'secureexam');
+    db = firebase.firestore(app);
+    // Enable offline persistence for resilience
+    try { await db.enablePersistence({ synchronizeTabs: true }); } catch(e) {}
+    return true;
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    db = null;
+    return false;
+  }
+}
+
+async function loadSavedFirebaseConfig() {
+  try {
+    const raw = localStorage.getItem(FB_CONFIG_KEY);
+    if (!raw) return;
+    const config = JSON.parse(raw);
+    const ok = await initFirebase(config);
+    if (ok) updateCloudBadge('connected');
+  } catch(e) {}
+}
+
+function updateCloudBadge(state) {
+  const badge = document.getElementById('cloud-status-badge');
+  if (!badge) return;
+  const states = {
+    connected:    { cls: 'connected',    icon: '●', text: 'Cloud: Terhubung', pulse: true },
+    disconnected: { cls: 'disconnected', icon: '○', text: 'Cloud: Tidak Aktif', pulse: false },
+    error:        { cls: 'error',        icon: '✕', text: 'Cloud: Error', pulse: false },
+    syncing:      { cls: 'connected',    icon: '↻', text: 'Cloud: Menyinkron...', pulse: true },
+  };
+  const s = states[state] || states.disconnected;
+  badge.className = `cloud-badge ${s.cls}`;
+  badge.innerHTML = `<div class="cloud-dot${s.pulse?' pulse':''}"></div><span>${s.text}</span>`;
+}
+
+// ── Cloud Setup Modal ─────────────────────
+function openCloudSetup() {
+  // Pre-fill if config exists
+  const raw = localStorage.getItem(FB_CONFIG_KEY);
+  if (raw) {
+    try { document.getElementById('firebase-config-input').value = JSON.stringify(JSON.parse(raw), null, 2); }
+    catch(e) {}
+  }
+  document.getElementById('cloud-test-result').textContent = '';
+  document.getElementById('modal-cloud').classList.remove('hidden');
+}
+
+async function saveFirebaseConfig() {
+  const btn = document.getElementById('cloud-save-btn');
+  const status = document.getElementById('cloud-test-result');
+  const raw = document.getElementById('firebase-config-input').value.trim();
+
+  if (!raw) {
+    status.innerHTML = '⚠️ Tempel Firebase config terlebih dahulu.';
+    status.style.color = 'var(--red)'; return;
+  }
+
+  // ── Deteksi file:// protocol ─────────────
+  if (location.protocol === 'file:') {
+    status.innerHTML = `
+      <strong style="color:var(--red)">🚫 Masalah Utama: File dibuka langsung (file://)</strong><br><br>
+      Firebase tidak bisa berjalan dari file yang dibuka langsung di browser.<br>
+      File harus diakses lewat <code>http://</code> atau <code>https://</code>.<br><br>
+      <strong style="color:var(--gold)">Cara Memperbaiki (pilih salah satu):</strong><br><br>
+      <strong>1. Python (paling mudah):</strong><br>
+      Buka Terminal / Command Prompt di folder file ini, lalu ketik:<br>
+      <code style="display:block;margin:6px 0;padding:6px;background:rgba(0,0,0,0.3);border-radius:4px">python -m http.server 8080</code>
+      Lalu buka browser dan akses: <code>http://localhost:8080/exam-app.html</code><br><br>
+      <strong>2. VS Code:</strong> Install ekstensi <em>Live Server</em> → klik kanan file → <em>Open with Live Server</em><br><br>
+      <strong>3. Upload ke hosting gratis:</strong> Drag & drop file ke <a href="https://app.netlify.com/drop" target="_blank" style="color:var(--gold)">app.netlify.com/drop</a>`;
+    status.style.color = 'var(--muted)';
+    btn.disabled = false; btn.innerHTML = '💾 Simpan & Hubungkan';
+    return;
+  }
+
+  // ── Parse config ─────────────────────────
+  let config;
+  try {
+    // Strip assignment wrapper: const x = {...}; or just {...}
+    let cleaned = raw
+      .replace(/^[\s\S]*?const\s+\w+\s*=\s*/, '')  // remove "const firebaseConfig = "
+      .replace(/;[\s\S]*$/, '')                      // remove trailing semicolon and anything after
+      .trim();
+
+    // Convert JS object literal to valid JSON (unquoted keys → quoted keys)
+    const asJson = cleaned
+      .replace(/\/\/.*$/gm, '')           // strip line comments
+      .replace(/,\s*([}\]])/g, '$1')      // remove trailing commas
+      .replace(/([{,]\s*)([a-zA-Z_$][\w$]*)\s*:/g, '$1"$2":')  // quote unquoted keys
+      .replace(/:\s*'([^']*)'/g, ': "$1"');  // single-quoted values → double-quoted
+
+    config = JSON.parse(asJson);
+    if (!config.apiKey || !config.projectId) throw new Error('Field apiKey atau projectId tidak ditemukan');
+  } catch(e) {
+    status.innerHTML = `❌ <strong>Config tidak bisa dibaca:</strong> ${e.message}<br><br>
+      Pastikan yang Anda salin hanya bagian <code>{ apiKey: "...", ... }</code> dari Firebase Console.<br>
+      Jangan sertakan <code>const firebaseConfig =</code> atau <code>firebase.initializeApp(...)</code>.`;
+    status.style.color = 'var(--red)'; return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Menghubungkan...';
+  status.innerHTML = '⏳ Menginisialisasi Firebase...';
+  status.style.color = 'var(--muted)';
+
+  const initOk = await initFirebase(config);
+  if (!initOk) {
+    status.innerHTML = '❌ Gagal inisialisasi Firebase. Config mungkin salah atau ada konflik.<br>Coba refresh halaman lalu coba lagi.';
+    status.style.color = 'var(--red)';
+    btn.disabled = false; btn.innerHTML = '💾 Simpan & Hubungkan';
+    return;
+  }
+
+  // ── Test connection ───────────────────────
+  status.innerHTML = '⏳ Menguji koneksi ke Firestore...';
+  try {
+    await db.collection('se_results').limit(1).get();
+    localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(config));
+    updateCloudBadge('connected');
+    status.innerHTML = '✅ <strong style="color:var(--green)">Berhasil terhubung ke Firebase!</strong><br>Hasil ujian peserta akan otomatis tersimpan ke cloud.';
+    status.style.color = 'var(--green)';
+    setTimeout(() => closeModal('modal-cloud'), 2200);
+  } catch(e) {
+    let errMsg = e.message || String(e);
+    let hint = '';
+    if (errMsg.includes('permission') || errMsg.includes('PERMISSION_DENIED')) {
+      hint = '<br><br>🔑 <strong>Penyebab:</strong> Security Rules belum dipublish atau masih default (deny all).<br>Buka Firestore → tab <strong>Rules</strong> → pastikan rules sudah seperti panduan → klik <strong>Publish</strong>.';
+    } else if (errMsg.includes('not-found') || errMsg.includes('NOT_FOUND')) {
+      hint = '<br><br>📦 <strong>Penyebab:</strong> Firestore Database belum dibuat di project ini.<br>Buka Firebase Console → Build → Firestore Database → Create database.';
+    } else if (errMsg.includes('network') || errMsg.includes('unavailable')) {
+      hint = '<br><br>🌐 <strong>Penyebab:</strong> Tidak ada koneksi internet atau Firebase sedang down.';
+    }
+    status.innerHTML = `❌ <strong>Koneksi gagal:</strong> ${errMsg}${hint}`;
+    status.style.color = 'var(--red)';
+    updateCloudBadge('error');
+    db = null;
+  }
+
+  btn.disabled = false; btn.innerHTML = '💾 Simpan & Hubungkan';
+}
+
+function disconnectCloud() {
+  localStorage.removeItem(FB_CONFIG_KEY);
+  db = null;
+  updateCloudBadge('disconnected');
+  document.getElementById('cloud-test-result').textContent = 'Koneksi cloud diputus.';
+  document.getElementById('cloud-test-result').style.color = 'var(--muted)';
+}
+
+// ── Cloud Data Operations ─────────────────
+async function cloudSaveResult(resultData) {
+  if (!db) return false;
+  try {
+    await db.collection('se_results').add({
+      ...resultData,
+      _savedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return true;
+  } catch(e) {
+    console.warn('Cloud save result failed:', e);
+    return false;
+  }
+}
+
+async function cloudLoadResults(examCode) {
+  if (!db) return null;
+  try {
+    let q = db.collection('se_results').orderBy('_savedAt', 'desc');
+    if (examCode) q = q.where('examCode', '==', examCode);
+    const snap = await q.get();
+    return snap.docs.map(d => ({ _cloudId: d.id, ...d.data() }));
+  } catch(e) {
+    console.warn('Cloud load results failed:', e);
+    return null;
+  }
+}
+
+async function cloudDeleteResult(cloudId) {
+  if (!db || !cloudId) return;
+  try { await db.collection('se_results').doc(cloudId).delete(); } catch(e) {}
+}
+
+async function cloudDeleteResultsByExam(examCode) {
+  if (!db) return;
+  try {
+    const snap = await db.collection('se_results').where('examCode','==',examCode).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  } catch(e) {}
+}
+
+async function cloudCheckAttempt(examCode, studentId) {
+  if (!db) return false;
+  try {
+    const key = attemptKey(examCode, studentId);
+    const doc = await db.collection('se_attempts').doc(key).get();
+    return doc.exists;
+  } catch(e) { return false; }
+}
+
+async function cloudRecordAttempt(examCode, studentId) {
+  if (!db) return;
+  try {
+    const key = attemptKey(examCode, studentId);
+    await db.collection('se_attempts').doc(key).set({
+      examCode, studentId,
+      time: new Date().toLocaleString('id-ID'),
+      _ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) {}
+}
+
+async function cloudDeleteAttempt(examCode, studentId) {
+  if (!db) return;
+  try {
+    await db.collection('se_attempts').doc(attemptKey(examCode, studentId)).delete();
+  } catch(e) {}
+}
+
+async function cloudResetAttemptsByExam(examCode) {
+  if (!db) return;
+  try {
+    const snap = await db.collection('se_attempts').where('examCode','==',examCode).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+// ADMIN AUTHENTICATION
+// ══════════════════════════════════════════
+let adminSessionActive = false; // in-memory session flag
+let _pinBuffer = '';
+let _pinMode = 'verify';    // 'set' | 'verify' | 'change-old' | 'change-new' | 'change-confirm'
+let _pinNewTemp = '';
+let _authCallback = null;
+
+const PIN_KEY = 'secureexam_admin_pin';
+const PIN_LEN = 4;
+
+// Simple one-way hash for storing PIN (not cryptographic, but avoids plaintext)
+function hashPin(pin) {
+  let h = 2166136261;
+  for (let i = 0; i < pin.length; i++) {
+    h ^= pin.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h.toString(16);
+}
+
+function hasAdminPin() {
+  return !!localStorage.getItem(PIN_KEY);
+}
+
+function verifyPin(pin) {
+  return localStorage.getItem(PIN_KEY) === hashPin(pin);
+}
+
+function storePin(pin) {
+  localStorage.setItem(PIN_KEY, hashPin(pin));
+}
+
+// ── Public API ───────────────────────────
+// Open auth to enter admin. callback() called on success.
+function requireAdminAuth(callback) {
+  if (adminSessionActive) { callback(); return; }
+  _authCallback = callback;
+  if (!hasAdminPin()) {
+    // First time: prompt to set a PIN
+    openAuthOverlay('set');
+  } else {
+    openAuthOverlay('verify');
+  }
+}
+
+function changeAdminPin() {
+  _authCallback = null;
+  openAuthOverlay('change-old');
+}
+
+function logoutAdmin() {
+  adminSessionActive = false;
+  showScreen('landing');
+}
+
+// ── Overlay control ──────────────────────
+function openAuthOverlay(mode) {
+  _pinMode = mode;
+  _pinBuffer = '';
+  _pinNewTemp = '';
+  updateAuthUI();
+  document.getElementById('admin-auth-overlay').classList.remove('hidden');
+}
+
+function cancelAdminAuth() {
+  document.getElementById('admin-auth-overlay').classList.add('hidden');
+  _pinBuffer = '';
+  _authCallback = null;
+}
+
+function updateAuthUI() {
+  const titles = {
+    'set':            'Buat PIN Admin',
+    'verify':         'Masuk Admin',
+    'change-old':     'Verifikasi PIN Lama',
+    'change-new':     'Buat PIN Baru',
+    'change-confirm': 'Konfirmasi PIN Baru',
+  };
+  const descs = {
+    'set':            `Buat PIN ${PIN_LEN} digit untuk mengamankan panel admin. PIN ini wajib diingat — tidak bisa dipulihkan.`,
+    'verify':         'Masukkan PIN admin untuk melanjutkan.',
+    'change-old':     'Masukkan PIN admin Anda saat ini untuk verifikasi.',
+    'change-new':     `Masukkan PIN baru (${PIN_LEN} digit).`,
+    'change-confirm': 'Masukkan PIN baru sekali lagi untuk konfirmasi.',
+  };
+  const steps = {
+    'set': `Langkah 1/2 — Masukkan PIN`,
+    'change-old': 'Langkah 1/3 — Verifikasi',
+    'change-new': 'Langkah 2/3 — PIN Baru',
+    'change-confirm': 'Langkah 3/3 — Konfirmasi',
+  };
+
+  document.getElementById('auth-title').textContent = titles[_pinMode] || 'Akses Admin';
+  document.getElementById('auth-desc').textContent  = descs[_pinMode] || '';
+  document.getElementById('auth-step').textContent  = steps[_pinMode] || '';
+  document.getElementById('auth-error').textContent = '';
+  updateDots();
+}
+
+function updateDots() {
+  for (let i = 0; i < PIN_LEN; i++) {
+    const dot = document.getElementById('dot-' + i);
+    if (dot) dot.classList.toggle('filled', i < _pinBuffer.length);
+  }
+}
+
+// ── Keypad ───────────────────────────────
+function pinPress(digit) {
+  if (_pinBuffer.length >= PIN_LEN) return;
+  _pinBuffer += digit;
+  updateDots();
+  if (_pinBuffer.length === PIN_LEN) {
+    setTimeout(processPinComplete, 120); // brief delay so last dot fills visually
+  }
+}
+
+function pinBackspace() {
+  _pinBuffer = _pinBuffer.slice(0, -1);
+  updateDots();
+}
+
+function pinClear() {
+  _pinBuffer = '';
+  updateDots();
+}
+
+// ── Logic ────────────────────────────────
+function processPinComplete() {
+  const pin = _pinBuffer;
+  _pinBuffer = '';
+  updateDots();
+
+  if (_pinMode === 'set') {
+    // First setup: store and done
+    storePin(pin);
+    adminSessionActive = true;
+    document.getElementById('admin-auth-overlay').classList.add('hidden');
+    toast('PIN admin berhasil dibuat ✓', 'ok');
+    if (_authCallback) { _authCallback(); _authCallback = null; }
+
+  } else if (_pinMode === 'verify') {
+    if (verifyPin(pin)) {
+      adminSessionActive = true;
+      document.getElementById('admin-auth-overlay').classList.add('hidden');
+      if (_authCallback) { _authCallback(); _authCallback = null; }
+    } else {
+      showAuthError('PIN salah. Coba lagi.');
+    }
+
+  } else if (_pinMode === 'change-old') {
+    if (verifyPin(pin)) {
+      _pinMode = 'change-new';
+      updateAuthUI();
+    } else {
+      showAuthError('PIN lama salah. Coba lagi.');
+    }
+
+  } else if (_pinMode === 'change-new') {
+    _pinNewTemp = pin;
+    _pinMode = 'change-confirm';
+    updateAuthUI();
+
+  } else if (_pinMode === 'change-confirm') {
+    if (pin === _pinNewTemp) {
+      storePin(pin);
+      _pinNewTemp = '';
+      document.getElementById('admin-auth-overlay').classList.add('hidden');
+      toast('PIN admin berhasil diubah ✓', 'ok');
+    } else {
+      _pinNewTemp = '';
+      _pinMode = 'change-new';
+      updateAuthUI();
+      showAuthError('PIN tidak cocok. Ulangi dari PIN baru.');
+    }
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.animation = 'none';
+  void el.offsetWidth; // reflow to restart animation
+  el.style.animation = '';
+  // Shake the dots
+  const dots = document.getElementById('pin-dots');
+  dots.style.animation = 'none';
+  void dots.offsetWidth;
+  dots.style.animation = 'shake 0.35s ease';
+  _pinBuffer = '';
+  updateDots();
+}
+
+// Allow physical keyboard for PIN entry
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('admin-auth-overlay').classList.contains('hidden')) return;
+  if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+  else if (e.key === 'Backspace') pinBackspace();
+  else if (e.key === 'Escape') cancelAdminAuth();
+});
+
+// ══════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  document.getElementById('screen-' + name).classList.remove('hidden');
+  if (name !== 'exam') stopExam();
+  if (name === 'entry') {
+    // Reset blocked state
+    document.getElementById('entry-blocked').classList.add('hidden');
+    document.querySelector('#screen-entry .btn-gold').style.display = '';
+  }
+}
+
+function goAdmin() {
+  requireAdminAuth(() => {
+    showScreen('admin');
+    loadAllExams();
+    renderExamList();
+    switchAdminTab('ujian');
+    const badge = document.getElementById('tab-hasil-badge');
+    const results = getResults();
+    if (badge) { badge.style.display = results.length ? '' : 'none'; badge.textContent = results.length; }
+  });
+}
+function goEntry() { showScreen('entry'); }
+
+// ══════════════════════════════════════════
+// EXAM LIST (MULTI-EXAM MANAGEMENT)
+// ══════════════════════════════════════════
+function renderExamList() {
+  const wrap = document.getElementById('exam-list-wrap');
+  const badge = document.getElementById('tab-ujian-badge');
+  if (!wrap) return;
+  if (allExams.length === 0) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:40px;text-align:center">Belum ada ujian. Klik "+ Buat Ujian Baru" untuk memulai.</div>';
+    badge.style.display = 'none';
+    return;
+  }
+  badge.style.display = '';
+  badge.textContent = allExams.length;
+
+  wrap.innerHTML = allExams.map(exam => {
+    const attempts = getAttemptsForExam(exam.code);
+    const results  = getResults().filter(r => r.examCode === exam.code);
+    const isActive = exam.id === activeExamId;
+    return `
+      <div class="exam-card ${isActive ? 'active-exam' : ''}" id="ec-${exam.id}">
+        <div class="exam-status ${exam.questions?.length > 0 ? 'active' : 'draft'}"></div>
+        <div class="exam-card-info">
+          <div class="exam-card-name">${exam.name || '(Belum diberi nama)'}</div>
+          <div class="exam-card-meta">
+            Kode: <strong style="color:var(--gold);font-family:'DM Mono',monospace">${exam.code || '—'}</strong>
+            &nbsp;·&nbsp; ${exam.questions?.length || 0} soal
+            &nbsp;·&nbsp; ${exam.duration || 60} menit
+            &nbsp;·&nbsp; ${results.length} peserta selesai
+            &nbsp;·&nbsp; <span style="color:${attempts.length>0?'var(--red)':'var(--green)'}">🔑 ${attempts.length} percobaan</span>
+          </div>
+        </div>
+        <div class="exam-card-actions">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();manageAttempts('${exam.id}')" title="Kelola percobaan peserta">🔑</button>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportSingleExam('${exam.id}')" title="Export">⬆</button>
+          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openExamEditor('${exam.id}')">✏️ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteExam('${exam.id}')">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function newExam() {
+  // Save current work first if editing
+  activeExamId = null;
+  questions = [];
+  // Clear editor form
+  document.getElementById('exam-name').value = '';
+  document.getElementById('exam-code').value = '';
+  document.getElementById('exam-duration').value = '60';
+  document.getElementById('exam-maxwarn').value = '3';
+  document.getElementById('ac-fullscreen').checked = true;
+  document.getElementById('ac-tabdetect').checked = true;
+  document.getElementById('ac-copyblock').checked = true;
+  document.getElementById('ac-rightclick').checked = true;
+  document.getElementById('ac-devtools').checked = true;
+  document.getElementById('ac-screenshot').checked = true;
+  document.getElementById('ac-shuffle').checked = false;
+  document.getElementById('q-editor-area').innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📝</div><p>Klik "+ Tambah Soal" untuk mulai membuat soal ujian.</p></div>`;
+  renderQList();
+  updateAdminSummary();
+  switchAdminTab('soal');
+  toast('Ujian baru siap diedit', 'ok');
+}
+
+function openExamEditor(id) {
+  const exam = allExams.find(e => e.id === id);
+  if (!exam) return;
+  activeExamId = id;
+  questions = JSON.parse(JSON.stringify(exam.questions || []));
+  // Populate form
+  document.getElementById('exam-name').value = exam.name || '';
+  document.getElementById('exam-code').value = exam.code || '';
+  document.getElementById('exam-duration').value = exam.duration || 60;
+  document.getElementById('exam-maxwarn').value = exam.maxWarnings || 3;
+  const ac = exam.ac || {};
+  document.getElementById('ac-fullscreen').checked = ac.fullscreen !== false;
+  document.getElementById('ac-tabdetect').checked  = ac.tabdetect  !== false;
+  document.getElementById('ac-copyblock').checked  = ac.copyblock  !== false;
+  document.getElementById('ac-rightclick').checked = ac.rightclick !== false;
+  document.getElementById('ac-devtools').checked   = ac.devtools   !== false;
+  document.getElementById('ac-screenshot').checked = ac.screenshot !== false;
+  document.getElementById('ac-shuffle').checked    = !!ac.shuffle;
+  document.getElementById('q-editor-area').innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📝</div><p>Pilih soal dari daftar atau tambah soal baru.</p></div>`;
+  renderQList();
+  updateAdminSummary();
+  switchAdminTab('soal');
+  renderExamList();
+}
+
+function confirmDeleteExam(id) {
+  const exam = allExams.find(e => e.id === id);
+  if (!exam) return;
+  document.getElementById('del-exam-name').textContent = exam.name || exam.code;
+  document.getElementById('del-exam-confirm').onclick = () => {
+    deleteExam(id);
+    closeModal('modal-del-exam');
+  };
+  document.getElementById('modal-del-exam').classList.remove('hidden');
+}
+
+function deleteExam(id) {
+  const exam = allExams.find(e => e.id === id);
+  if (exam) resetAllAttempts(exam.code);
+  allExams = allExams.filter(e => e.id !== id);
+  saveAllExams();
+  if (activeExamId === id) {
+    activeExamId = null;
+    questions = [];
+    renderQList();
+    updateAdminSummary();
+  }
+  renderExamList();
+  toast('Ujian dihapus');
+}
+
+function exportSingleExam(id) {
+  const exam = allExams.find(e => e.id === id);
+  if (!exam) return;
+  const blob = new Blob([JSON.stringify(exam, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'secureexam-' + (exam.code || exam.id) + '.json';
+  a.click();
+  toast('File ujian diexport!', 'ok');
+}
+
+// Attempt management modal
+let _modalAttemptExamId = null;
+async function manageAttempts(id) {
+  const exam = allExams.find(e => e.id === id);
+  if (!exam) return;
+  _modalAttemptExamId = id;
+  document.getElementById('ma-exam-name').textContent = exam.name + ' (' + exam.code + ')';
+  document.getElementById('modal-attempts').classList.remove('hidden');
+  await renderAttemptList(exam.code);
+}
+
+async function renderAttemptList(examCode) {
+  const list = document.getElementById('ma-list');
+  list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:12px"><div class="spinner" style="display:inline-block;margin-right:8px"></div>Memuat data...</div>';
+
+  // Merge localStorage + cloud attempts
+  let attempts = getAttemptsForExam(examCode);
+  if (db) {
+    try {
+      const snap = await db.collection('se_attempts').where('examCode','==',examCode).get();
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (!attempts.find(a => a.studentId === data.studentId)) {
+          attempts.push({ studentId: data.studentId, time: data.time || '—', _cloudId: d.id });
+        }
+      });
+    } catch(e) {}
+  }
+  if (attempts.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:12px">Belum ada peserta yang mengikuti ujian ini.</div>';
+    return;
+  }
+  list.innerHTML = attempts.map(a => `
+    <div class="attempt-item">
+      <div>
+        <div class="a-id">No. ${a.studentId}</div>
+        <div class="a-time">${a.time}${db ? ' ☁' : ''}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetOneAttempt('${examCode}','${a.studentId}')">↩ Izinkan Ulang</button>
+    </div>`).join('');
+}
+
+async function resetOneAttempt(examCode, studentId) {
+  deleteAttempt(examCode, studentId);
+  await cloudDeleteAttempt(examCode, studentId);
+  await renderAttemptList(examCode);
+  renderExamList();
+  toast('Peserta dapat mengikuti ujian kembali', 'ok');
+}
+
+async function resetAllAttemptsModal() {
+  const exam = allExams.find(e => e.id === _modalAttemptExamId);
+  if (!exam) return;
+  if (!confirm('Reset semua percobaan untuk ujian ini?')) return;
+  resetAllAttempts(exam.code);
+  await cloudResetAttemptsByExam(exam.code);
+  await renderAttemptList(exam.code);
+  renderExamList();
+  toast('Semua percobaan direset', 'ok');
+}
+
+// ══════════════════════════════════════════
+// ADMIN: QUESTION MANAGEMENT
+// ══════════════════════════════════════════
+function addQuestion(data) {
+  const q = data || {
+    type: 'mc',
+    text: '',
+    options: ['', '', '', ''],
+    correct: 0,
+    points: 10,
+    kompetensi: ''
+  };
+  questions.push(q);
+  renderQList();
+  editQuestion(questions.length - 1);
+  updateAdminSummary();
+}
+
+function renderQList() {
+  const list = document.getElementById('q-list');
+  const total = document.getElementById('q-total');
+  total.textContent = questions.length;
+  if (questions.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Belum ada soal.</div>';
+    return;
+  }
+  list.innerHTML = questions.map((q,i) => `
+    <div class="q-item" id="qi-${i}" onclick="editQuestion(${i})">
+      <span class="q-num">${i+1}</span>
+      <span class="badge ${q.type==='essay'?'badge-gold':'badge-green'}" style="font-size:0.65rem">${q.type==='essay'?'Essay':'PG'}</span>
+      ${q.kompetensi ? `<span class="badge badge-gold" style="font-size:0.62rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${q.kompetensi}">🏷 ${q.kompetensi}</span>` : ''}
+      <span class="q-text">${q.text || '(soal belum diisi)'}</span>
+      <button class="q-del" onclick="event.stopPropagation();deleteQ(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function deleteQ(i) {
+  questions.splice(i, 1);
+  renderQList();
+  document.getElementById('q-editor-area').innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📝</div><p>Pilih soal untuk diedit.</p></div>`;
+  updateAdminSummary();
+  toast('Soal dihapus');
+}
+
+function editQuestion(i) {
+  document.querySelectorAll('.q-item').forEach(el=>el.classList.remove('active'));
+  const qi = document.getElementById('qi-' + i);
+  if (qi) qi.classList.add('active');
+
+  const q = questions[i];
+  const isEssay = q.type === 'essay';
+  const area = document.getElementById('q-editor-area');
+  area.innerHTML = `
+    <div class="card q-editor">
+      <div class="flex-row" style="justify-content:space-between">
+        <div style="font-weight:600">Soal #${i+1}</div>
+        <div class="flex-row">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer;text-transform:none">
+            <input type="checkbox" ${isEssay?'checked':''} onchange="toggleType(${i},this.checked)" style="accent-color:var(--gold)">
+            <span>Essay</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Teks Soal</label>
+        <textarea id="eq-text" rows="3" onchange="questions[${i}].text=this.value;renderQList()">${q.text}</textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 100px;gap:12px">
+        <div class="form-group" style="margin:0">
+          <label>Elemen Kompetensi <span style="color:var(--gold)">🏷</span></label>
+          <input type="text" id="eq-kompetensi" value="${q.kompetensi||''}" placeholder="cth: C2 – Memahami, C4 – Menganalisis, KD 3.2...">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Poin</label>
+          <input type="number" id="eq-points" value="${q.points}" min="1" max="100" onchange="questions[${i}].points=parseInt(this.value)||10;updateAdminSummary()">
+        </div>
+      </div>
+      ${isEssay ? `
+        <div style="padding:12px;background:rgba(232,184,75,0.07);border-radius:8px;font-size:0.83rem;color:var(--muted)">
+          Soal essay dinilai secara manual. Jawaban peserta akan ditampilkan di laporan.
+        </div>
+      ` : `
+        <div>
+          <label style="display:block;margin-bottom:10px;font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Pilihan Jawaban <span style="color:var(--green)">(✓ = jawaban benar)</span></label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${['A','B','C','D'].map((ltr,oi) => `
+              <div class="option-row">
+                <span class="option-label">${ltr}.</span>
+                <input type="text" value="${q.options[oi]||''}" placeholder="Pilihan ${ltr}" onchange="questions[${i}].options[${oi}]=this.value" style="flex:1">
+                <input type="radio" name="correct-${i}" class="option-correct" ${q.correct===oi?'checked':''} onchange="questions[${i}].correct=${oi}" title="Jawaban benar">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `}
+      <div class="flex-row">
+        <button class="btn btn-gold btn-sm" onclick="saveQEdit(${i})">💾 Simpan Soal</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteQ(${i})">🗑 Hapus</button>
+      </div>
+    </div>
+  `;
+}
+
+function saveQEdit(i) {
+  const q = questions[i];
+  q.text = document.getElementById('eq-text').value;
+  q.kompetensi = document.getElementById('eq-kompetensi').value;
+  q.points = parseInt(document.getElementById('eq-points').value)||10;
+  updateAdminSummary();
+  renderQList();
+  toast('Soal disimpan ✓', 'ok');
+}
+
+function toggleType(i, isEssay) {
+  questions[i].type = isEssay ? 'essay' : 'mc';
+  editQuestion(i);
+}
+
+function updateAdminSummary() {
+  document.getElementById('s-qcount').textContent = questions.length;
+  document.getElementById('s-points').textContent = questions.reduce((s,q)=>s+(q.points||10),0);
+  const dur = parseInt(document.getElementById('exam-duration').value)||60;
+  document.getElementById('s-dur').textContent = dur;
+  document.getElementById('q-total').textContent = questions.length;
+}
+
+function clearAll() {
+  if (!confirm('Hapus semua soal?')) return;
+  questions = [];
+  renderQList();
+  document.getElementById('q-editor-area').innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📝</div><p>Belum ada soal.</p></div>`;
+  updateAdminSummary();
+}
+
+function saveAndPreview() {
+  if (questions.length === 0) { toast('Tambahkan soal terlebih dahulu!', 'error'); return; }
+  const name = document.getElementById('exam-name').value.trim();
+  const code = document.getElementById('exam-code').value.trim().toUpperCase();
+  if (!name || !code) { toast('Isi nama dan kode ujian!', 'error'); return; }
+  // Check code uniqueness (excluding current exam)
+  const duplicate = allExams.find(e => e.code === code && e.id !== activeExamId);
+  if (duplicate) { toast('Kode ujian sudah digunakan oleh ujian lain!', 'error'); return; }
+  saveCurrentExam();
+  toast(`Ujian "${name}" disimpan! Kode: ${code}`, 'ok');
+  renderExamList();
+}
+
+function saveCurrentExam() {
+  const exam = {
+    id: activeExamId || genId(),
+    name: document.getElementById('exam-name').value.trim(),
+    code: document.getElementById('exam-code').value.trim().toUpperCase(),
+    duration: parseInt(document.getElementById('exam-duration').value)||60,
+    maxWarnings: parseInt(document.getElementById('exam-maxwarn').value)||3,
+    ac: {
+      fullscreen: document.getElementById('ac-fullscreen').checked,
+      tabdetect:  document.getElementById('ac-tabdetect').checked,
+      copyblock:  document.getElementById('ac-copyblock').checked,
+      rightclick: document.getElementById('ac-rightclick').checked,
+      devtools:   document.getElementById('ac-devtools').checked,
+      screenshot: document.getElementById('ac-screenshot').checked,
+      shuffle:    document.getElementById('ac-shuffle').checked,
+    },
+    questions: JSON.parse(JSON.stringify(questions))
+  };
+  if (!activeExamId) {
+    activeExamId = exam.id;
+    allExams.push(exam);
+  } else {
+    const idx = allExams.findIndex(e => e.id === activeExamId);
+    if (idx >= 0) allExams[idx] = exam;
+    else allExams.push(exam);
+  }
+  examConfig = exam;
+  saveAllExams();
+}
+
+function exportExam() {
+  if (!activeExamId) { toast('Pilih atau simpan ujian terlebih dahulu', 'error'); return; }
+  exportSingleExam(activeExamId);
+}
+
+// ══════════════════════════════════════════
+// AI GENERATE
+// ══════════════════════════════════════════
+function openAiGen() { document.getElementById('modal-ai').classList.remove('hidden'); }
+
+async function generateAI() {
+  const topic = document.getElementById('ai-topic').value.trim();
+  if (!topic) { toast('Isi topik terlebih dahulu!', 'error'); return; }
+  
+  const level = document.getElementById('ai-level').value;
+  const mcCount = parseInt(document.getElementById('ai-mc-count').value)||5;
+  const essayCount = parseInt(document.getElementById('ai-essay-count').value)||2;
+  const extra = document.getElementById('ai-extra').value;
+
+  const btn = document.getElementById('ai-gen-btn');
+  const status = document.getElementById('ai-status');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Generating...';
+  status.innerHTML = '⏳ AI sedang membuat soal, mohon tunggu...';
+
+  const prompt = `Buat soal ujian dalam bahasa Indonesia untuk topik: "${topic}".
+Tingkat kesulitan: ${level}.
+${mcCount > 0 ? `Buat ${mcCount} soal pilihan ganda (dengan 4 pilihan A,B,C,D dan 1 jawaban benar).` : ''}
+${essayCount > 0 ? `Buat ${essayCount} soal essay.` : ''}
+${extra ? `Instruksi tambahan: ${extra}` : ''}
+
+Kembalikan HANYA array JSON (tanpa markdown, tanpa backtick, tanpa penjelasan), formatnya:
+[
+  {
+    "type": "mc",
+    "text": "teks soal",
+    "options": ["A. pilihan", "B. pilihan", "C. pilihan", "D. pilihan"],
+    "correct": 0,
+    "points": 10,
+    "kompetensi": "C2 – Memahami"
+  },
+  {
+    "type": "essay",
+    "text": "teks soal essay",
+    "options": [],
+    "correct": -1,
+    "points": 20,
+    "kompetensi": "C4 – Menganalisis"
+  }
+]
+correct adalah index 0-3 untuk pilihan ganda, -1 untuk essay.
+Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6) beserta deskripsinya, atau gunakan format Kompetensi Dasar (KD) jika relevan.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content.map(c => c.text || '').join('');
+    // Strip markdown fences if present
+    const clean = text.replace(/```json|```/g,'').trim();
+    const generated = JSON.parse(clean);
+    if (!Array.isArray(generated)) throw new Error('Format tidak valid');
+    
+    generated.forEach(q => questions.push({
+      type: q.type || 'mc',
+      text: q.text || '',
+      options: q.options || ['','','',''],
+      correct: q.correct ?? 0,
+      points: q.points || 10,
+      kompetensi: q.kompetensi || ''
+    }));
+    renderQList();
+    updateAdminSummary();
+    closeModal('modal-ai');
+    toast(`${generated.length} soal berhasil di-generate! ✓`, 'ok');
+  } catch(e) {
+    status.innerHTML = '❌ Gagal generate: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Generate Soal';
+  }
+}
+
+// ══════════════════════════════════════════
+// IMPORT/EXPORT
+// ══════════════════════════════════════════
+function openImport() { document.getElementById('modal-import').classList.remove('hidden'); }
+
+function importJSON() {
+  try {
+    const data = JSON.parse(document.getElementById('import-json').value);
+    if (Array.isArray(data)) {
+      // Array of questions → add to current editor
+      data.forEach(q => questions.push(q));
+      renderQList(); updateAdminSummary();
+    } else if (data.questions) {
+      // Single exam config → import as new exam
+      const exam = {
+        id: genId(),
+        name: data.name || 'Ujian Import',
+        code: (data.code || 'IMPORT').toUpperCase(),
+        duration: data.duration || 60,
+        maxWarnings: data.maxWarnings || 3,
+        ac: data.ac || {},
+        questions: data.questions
+      };
+      // Ensure unique code
+      let base = exam.code, n = 1;
+      while (allExams.find(e => e.code === exam.code)) exam.code = base + (n++);
+      allExams.push(exam);
+      saveAllExams();
+      renderExamList();
+      openExamEditor(exam.id);
+    }
+    closeModal('modal-import');
+    toast('Import berhasil!', 'ok');
+  } catch(e) {
+    toast('Format JSON tidak valid!', 'error');
+  }
+}
+
+// ══════════════════════════════════════════
+// STUDENT ENTRY
+// ══════════════════════════════════════════
+async function startExam() {
+  const name  = document.getElementById('student-name').value.trim();
+  const sid   = document.getElementById('student-id').value.trim();
+  const code  = document.getElementById('entry-code').value.trim().toUpperCase();
+  const agreed = document.getElementById('rules-agree').checked;
+
+  document.getElementById('entry-blocked').classList.add('hidden');
+  document.querySelector('#screen-entry .btn-gold').style.display = '';
+
+  if (!name || !sid) { toast('Isi nama dan nomor peserta!', 'error'); return; }
+  if (!code)         { toast('Isi kode ujian!', 'error'); return; }
+  if (!agreed)       { toast('Anda harus menyetujui peraturan ujian!', 'error'); return; }
+
+  // Find exam from allExams
+  loadAllExams();
+  let cfg = findExamByCode(code);
+
+  // Fallback: support legacy single-config storage
+  if (!cfg) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem('secureexam_config') || 'null');
+      if (legacy && legacy.code === code) cfg = legacy;
+    } catch(e) {}
+  }
+
+  if (!cfg)                                 { toast('Kode ujian tidak ditemukan. Hubungi pengawas.', 'error'); return; }
+  if (!cfg.questions || !cfg.questions.length) { toast('Ujian belum memiliki soal!', 'error'); return; }
+
+  // ── ONE-TIME ATTEMPT CHECK ──────────────
+  // Check localStorage first (fast), then cloud (authoritative)
+  let alreadyAttempted = hasAttempted(code, sid);
+  if (!alreadyAttempted && db) {
+    try {
+      updateCloudBadge('syncing');
+      alreadyAttempted = await cloudCheckAttempt(code, sid);
+      updateCloudBadge('connected');
+    } catch(e) { updateCloudBadge('connected'); }
+  }
+  if (alreadyAttempted) {
+    document.getElementById('entry-blocked-msg').textContent =
+      `"${name}" dengan No. Peserta ${sid} sudah pernah mengikuti ujian "${cfg.name}". Setiap peserta hanya diizinkan satu kali percobaan. Hubungi pengawas jika ada kesalahan.`;
+    document.getElementById('entry-blocked').classList.remove('hidden');
+    document.querySelector('#screen-entry .btn-gold').style.display = 'none';
+    return;
+  }
+
+  examConfig  = cfg;
+  acSettings  = cfg.ac || {};
+  studentInfo = { name, id: sid };
+  answers     = {};
+  violations  = [];
+  warnCount   = 0;
+  currentQ    = 0;
+
+  qOrder = cfg.questions.map((_,i) => i);
+  if (acSettings.shuffle) qOrder = qOrder.sort(() => Math.random() - 0.5);
+
+  timeLeft = (cfg.duration || 60) * 60;
+
+  showScreen('exam');
+  renderExam();
+  startTimer();
+  initAntiCheat();
+
+  if (acSettings.fullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+
+// ══════════════════════════════════════════
+// EXAM RENDER
+// ══════════════════════════════════════════
+function renderExam() {
+  renderQNav();
+  renderCurrentQ();
+}
+
+function renderQNav() {
+  const wrap = document.getElementById('q-nav-wrap');
+  wrap.innerHTML = qOrder.map((qi, idx) => `
+    <div class="q-nav-item ${idx===currentQ?'current':''} ${answers[idx]!==undefined?'answered':''}"
+         onclick="goToQ(${idx})">${idx+1}</div>
+  `).join('');
+  const answered = Object.keys(answers).length;
+  document.getElementById('q-progress').textContent = answered + '/' + qOrder.length;
+}
+
+function renderCurrentQ() {
+  const qi = qOrder[currentQ];
+  const q = examConfig.questions[qi];
+  const total = qOrder.length;
+
+  document.getElementById('q-counter').textContent = `Soal ${currentQ+1} dari ${total}`;
+  document.getElementById('q-progress-bar').style.width = ((currentQ+1)/total*100)+'%';
+  document.getElementById('q-text').textContent = q.text;
+  document.getElementById('q-points').innerHTML = `📌 Poin: ${q.points}${q.kompetensi ? ` &nbsp;|&nbsp; 🏷 <span style="color:var(--gold);font-weight:600">${q.kompetensi}</span>` : ''}`;
+
+  document.getElementById('btn-prev').disabled = currentQ === 0;
+  document.getElementById('btn-next').textContent = currentQ === total-1 ? 'Selesai ✓' : 'Selanjutnya →';
+
+  const area = document.getElementById('q-answer-area');
+  if (q.type === 'essay') {
+    area.innerHTML = `
+      <div class="essay-area">
+        <label style="font-size:0.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Jawaban Anda</label>
+        <textarea id="essay-ans" rows="6" placeholder="Tulis jawaban Anda di sini..."
+          onchange="answers[${currentQ}]=this.value;renderQNav()">${answers[currentQ]||''}</textarea>
+      </div>`;
+  } else {
+    const cur = answers[currentQ];
+    area.innerHTML = `
+      <div class="options-list">
+        ${q.options.map((opt,oi) => `
+          <button class="option-btn ${cur===oi?'selected':''}" onclick="selectOption(${currentQ},${oi})">
+            <span class="option-key">${'ABCD'[oi]}.</span>
+            <span class="option-text">${opt}</span>
+          </button>
+        `).join('')}
+      </div>`;
+  }
+}
+
+function selectOption(qIdx, optIdx) {
+  answers[qIdx] = optIdx;
+  renderQNav();
+  // Re-render options to show selected
+  const btns = document.querySelectorAll('.option-btn');
+  btns.forEach((b,i) => b.classList.toggle('selected', i===optIdx));
+}
+
+function goToQ(idx) { currentQ = idx; renderCurrentQ(); renderQNav(); }
+function prevQ() { if (currentQ > 0) { currentQ--; renderCurrentQ(); renderQNav(); } }
+function nextQ() {
+  if (currentQ === qOrder.length - 1) { confirmSubmit(); return; }
+  currentQ++;
+  renderCurrentQ();
+  renderQNav();
+}
+
+// ══════════════════════════════════════════
+// TIMER
+// ══════════════════════════════════════════
+function startTimer() {
+  clearInterval(timerInterval);
+  examActive = true;
+  timerInterval = setInterval(() => {
+    if (!examActive) { clearInterval(timerInterval); return; }
+    timeLeft--;
+    const m = Math.floor(timeLeft/60);
+    const s = timeLeft % 60;
+    const display = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    const el = document.getElementById('timer-display');
+    if (el) {
+      el.textContent = display;
+      const stat = el.closest('.exam-stat');
+      if (timeLeft <= 300) stat?.classList.add('timer-warning');
+    }
+    if (timeLeft <= 0) submitExam(true);
+  }, 1000);
+}
+
+function stopExam() {
+  examActive = false;
+  clearInterval(timerInterval);
+  removeAntiCheat();
+}
+
+// ══════════════════════════════════════════
+// ANTI-CHEAT
+// ══════════════════════════════════════════
+function initAntiCheat() {
+  // Tab / visibility detection
+  if (acSettings.tabdetect) {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onWindowBlur);
+  }
+  // Copy-paste block
+  if (acSettings.copyblock) {
+    document.addEventListener('copy', blockEvent);
+    document.addEventListener('cut', blockEvent);
+    document.addEventListener('paste', blockEvent);
+  }
+  // Right click
+  if (acSettings.rightclick) {
+    document.addEventListener('contextmenu', blockEvent);
+  }
+  // Keyboard shortcuts
+  document.addEventListener('keydown', onKeyDown);
+  // DevTools detection
+  if (acSettings.devtools) startDevToolsDetection();
+  // Screenshot
+  if (acSettings.screenshot) document.addEventListener('keyup', onScreenshot);
+  // Fullscreen exit
+  if (acSettings.fullscreen) {
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+  }
+}
+
+function removeAntiCheat() {
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  window.removeEventListener('blur', onWindowBlur);
+  document.removeEventListener('copy', blockEvent);
+  document.removeEventListener('cut', blockEvent);
+  document.removeEventListener('paste', blockEvent);
+  document.removeEventListener('contextmenu', blockEvent);
+  document.removeEventListener('keydown', onKeyDown);
+  document.removeEventListener('keyup', onScreenshot);
+  document.removeEventListener('fullscreenchange', onFullscreenChange);
+  stopDevToolsDetection();
+}
+
+function blockEvent(e) {
+  if (!examActive) return;
+  e.preventDefault();
+  e.stopPropagation();
+  return false;
+}
+
+function onVisibilityChange() {
+  if (!examActive) return;
+  if (document.hidden) triggerViolation('Pindah tab atau meminimalkan browser terdeteksi');
+}
+
+function onWindowBlur() {
+  if (!examActive) return;
+  if (!document.fullscreenElement) return; // Already handled by fullscreen change
+  triggerViolation('Jendela browser kehilangan fokus terdeteksi');
+}
+
+function onKeyDown(e) {
+  if (!examActive) return;
+  // Block F12, DevTools shortcuts
+  if (e.key === 'F12') { blockEvent(e); triggerViolation('Tombol F12 (DevTools) ditekan'); return; }
+  if ((e.ctrlKey||e.metaKey) && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) {
+    blockEvent(e); triggerViolation('Shortcut DevTools terdeteksi'); return;
+  }
+  if ((e.ctrlKey||e.metaKey) && e.key.toUpperCase() === 'U') { blockEvent(e); return; }
+  if ((e.ctrlKey||e.metaKey) && ['C','X','V','A'].includes(e.key.toUpperCase())) {
+    if (acSettings.copyblock) { blockEvent(e); }
+  }
+  if (e.key === 'Escape' && acSettings.fullscreen) {
+    // Will be handled by fullscreenchange
+  }
+}
+
+function onScreenshot(e) {
+  if (!examActive) return;
+  if (e.key === 'PrintScreen' || (e.metaKey && e.shiftKey && ['3','4','5'].includes(e.key))) {
+    triggerViolation('Percobaan screenshot terdeteksi');
+    // Temporarily black out
+    document.body.style.visibility = 'hidden';
+    setTimeout(()=>{ document.body.style.visibility = ''; }, 200);
+  }
+}
+
+function onFullscreenChange() {
+  if (!examActive) return;
+  if (!document.fullscreenElement) {
+    triggerViolation('Keluar dari mode layar penuh terdeteksi');
+    // Re-request fullscreen after warning dismissed
+  }
+}
+
+let devtoolsTimer = null;
+function startDevToolsDetection() {
+  // Detect via console timing (common heuristic)
+  devtoolsTimer = setInterval(() => {
+    if (!examActive) return;
+    const start = performance.now();
+    // eslint-disable-next-line no-console
+    console.log('%c', 'color:transparent');
+    const end = performance.now();
+    if (end - start > 100) triggerViolation('Kemungkinan DevTools terbuka terdeteksi');
+  }, 3000);
+}
+function stopDevToolsDetection() {
+  clearInterval(devtoolsTimer);
+}
+
+function triggerViolation(msg) {
+  if (!examActive) return;
+  warnCount++;
+  const timestamp = new Date().toLocaleTimeString('id-ID');
+  violations.push({ time: timestamp, msg });
+
+  const maxWarn = examConfig.maxWarnings || 3;
+  document.getElementById('warn-count-display').textContent = warnCount;
+  document.getElementById('warn-max').textContent = maxWarn;
+  document.getElementById('warn-message').textContent = msg + '. Tindakan ini dicatat dan dilaporkan kepada pengawas.';
+  document.getElementById('warn-display').textContent = warnCount;
+  document.getElementById('warning-overlay').classList.remove('hidden');
+
+  if (warnCount >= maxWarn) {
+    document.getElementById('warning-overlay').innerHTML = `
+      <div class="warn-icon">🚫</div>
+      <h2>UJIAN DIHENTIKAN</h2>
+      <p>Anda telah melebihi batas peringatan (${maxWarn}x). Ujian dihentikan secara otomatis.</p>
+      <button class="btn btn-danger" onclick="submitExam(false, true)">Lihat Hasil Ujian</button>
+    `;
+  }
+}
+
+function dismissWarning() {
+  document.getElementById('warning-overlay').classList.add('hidden');
+  if (acSettings.fullscreen && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(()=>{});
+  }
+}
+
+// ══════════════════════════════════════════
+// SUBMIT EXAM
+// ══════════════════════════════════════════
+function confirmSubmit() {
+  const answered = Object.keys(answers).length;
+  const total = qOrder.length;
+  document.getElementById('submit-summary').innerHTML = `
+    ✅ Dijawab: ${answered} soal<br>
+    ⭕ Belum dijawab: ${total - answered} soal<br>
+    ⚠️ Pelanggaran: ${warnCount}x
+  `;
+  document.getElementById('modal-submit').classList.remove('hidden');
+}
+
+async function submitExam(timeUp=false, forceStop=false) {
+  closeModal('modal-submit');
+  examActive = false;
+  clearInterval(timerInterval);
+  removeAntiCheat();
+
+  if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+
+  // Record one-time attempt — localStorage + cloud
+  recordAttempt(examConfig.code, studentInfo.id);
+  cloudRecordAttempt(examConfig.code, studentInfo.id);
+
+  // Calculate score
+  let correct = 0, wrong = 0, unanswered = 0, totalPossible = 0, earned = 0;
+  const details = [];
+
+  qOrder.forEach((qi, idx) => {
+    const q = examConfig.questions[qi];
+    totalPossible += q.points;
+    const ans = answers[idx];
+
+    if (q.type === 'essay') {
+      details.push({ q: q.text, a: ans || '(tidak dijawab)', type:'essay', pts: q.points, kompetensi: q.kompetensi||'' });
+      if (ans) correct++;
+      else unanswered++;
+    } else {
+      if (ans === undefined) {
+        unanswered++;
+        details.push({ q: q.text, a: '(tidak dijawab)', correct: false, expected: 'ABCD'[q.correct], type:'mc', pts: 0, kompetensi: q.kompetensi||'' });
+      } else if (ans === q.correct) {
+        correct++;
+        earned += q.points;
+        details.push({ q: q.text, a: 'ABCD'[ans], correct: true, type:'mc', pts: q.points, kompetensi: q.kompetensi||'' });
+      } else {
+        wrong++;
+        details.push({ q: q.text, a: 'ABCD'[ans], correct: false, expected: 'ABCD'[q.correct], type:'mc', pts: 0, kompetensi: q.kompetensi||'' });
+      }
+    }
+  });
+
+  const mcTotal = examConfig.questions.filter(q=>q.type!=='essay').reduce((s,q)=>s+q.points,0);
+  const score = mcTotal > 0 ? Math.round(earned / mcTotal * 100) : 0;
+
+  // Save result to localStorage (offline backup)
+  const resultData = {
+    name: studentInfo.name,
+    id: studentInfo.id,
+    examName: examConfig.name,
+    examCode: examConfig.code,
+    submittedAt: new Date().toLocaleString('id-ID'),
+    score, correct, wrong, unanswered,
+    violations, warnCount,
+    details
+  };
+  try {
+    const stored = JSON.parse(localStorage.getItem('secureexam_results')||'[]');
+    stored.push(resultData);
+    localStorage.setItem('secureexam_results', JSON.stringify(stored));
+  } catch(e) {}
+
+  // Save to cloud (primary)
+  const cloudOk = await cloudSaveResult(resultData);
+  if (cloudOk) {
+    document.getElementById('r-cloud-status').innerHTML =
+      '<span style="color:var(--green)">☁️ Hasil berhasil dikirim ke cloud ✓</span>';
+  } else if (db) {
+    document.getElementById('r-cloud-status').innerHTML =
+      '<span style="color:var(--red)">⚠️ Gagal kirim ke cloud — tersimpan lokal saja</span>';
+  } else {
+    document.getElementById('r-cloud-status').innerHTML =
+      '<span style="color:var(--muted)">📱 Tersimpan lokal (cloud tidak dikonfigurasi)</span>';
+  }
+
+  // Render result
+  document.getElementById('result-name').textContent = `${studentInfo.name} — ${studentInfo.id}`;
+  document.getElementById('result-score').textContent = score;
+  document.getElementById('r-correct').textContent = correct;
+  document.getElementById('r-wrong').textContent = wrong;
+  document.getElementById('r-unanswered').textContent = unanswered;
+  document.getElementById('r-viol-count').textContent = violations.length;
+
+  const violList = document.getElementById('r-viol-list');
+  if (violations.length === 0) {
+    violList.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Tidak ada pelanggaran tercatat ✅</div>';
+  } else {
+    violList.innerHTML = violations.map(v => `
+      <div class="viol-item">
+        <span class="viol-time">${v.time}</span>
+        <span>${v.msg}</span>
+      </div>
+    `).join('');
+  }
+
+  const detailEl = document.getElementById('r-answers-detail');
+  detailEl.innerHTML = details.map((d,i) => `
+    <div class="answer-item ${d.type==='essay'?'':''}${d.correct===true?' correct':d.correct===false?' wrong':''}">
+      <div class="q" style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
+        <span>${i+1}. ${d.q}</span>
+        ${d.kompetensi ? `<span class="badge badge-gold" style="font-size:0.65rem;white-space:nowrap">🏷 ${d.kompetensi}</span>` : ''}
+      </div>
+      <div class="a">
+        ${d.type==='essay' ? (d.a||'—') : `
+          Jawaban: <strong>${d.a}</strong>
+          ${d.correct===true ? ' ✅ Benar' : d.correct===false ? ` ❌ (Benar: ${d.expected})` : ''}
+        `}
+      </div>
+    </div>
+  `).join('');
+
+  showScreen('result');
+}
+
+function printResult() { window.print(); }
+
+function downloadExcelSingle() {
+  // Download result for current student only
+  const stored = JSON.parse(localStorage.getItem('secureexam_results')||'[]');
+  const last = stored[stored.length - 1];
+  if (!last) { toast('Tidak ada data hasil ujian', 'error'); return; }
+  buildExcel([last], `Hasil-${last.id}`);
+}
+
+function buildExcel(results, filename) {
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Rekap Nilai ──────────────────
+  const summaryHeader = ['No','Nama Peserta','No. Peserta','Ujian','Waktu Submit','Nilai','Benar','Salah','Tidak Dijawab','Jumlah Pelanggaran'];
+  const summaryRows = results.map((r, i) => [
+    i+1, r.name, r.id, r.examName, r.submittedAt,
+    r.score, r.correct, r.wrong, r.unanswered, r.warnCount
+  ]);
+  const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeader, ...summaryRows]);
+  // Style header row (column widths)
+  wsSummary['!cols'] = [6,22,16,24,20,8,8,8,16,18].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Rekap Nilai');
+
+  // ── Sheet 2: Detail Jawaban ───────────────
+  const detailHeader = ['Nama','No. Peserta','No. Soal','Elemen Kompetensi','Tipe','Pertanyaan','Jawaban Peserta','Jawaban Benar','Status','Poin Diperoleh'];
+  const detailRows = [];
+  results.forEach(r => {
+    r.details.forEach((d, idx) => {
+      detailRows.push([
+        r.name, r.id, idx+1,
+        d.kompetensi || '—',
+        d.type === 'essay' ? 'Essay' : 'Pilihan Ganda',
+        d.q,
+        d.a,
+        d.type === 'essay' ? '(Dinilai Manual)' : (d.expected || d.a),
+        d.type === 'essay' ? 'Essay' : (d.correct === true ? 'Benar' : d.correct === false ? 'Salah' : 'Tidak Dijawab'),
+        d.pts
+      ]);
+    });
+  });
+  const wsDetail = XLSX.utils.aoa_to_sheet([detailHeader, ...detailRows]);
+  wsDetail['!cols'] = [18,14,8,22,14,50,20,20,14,12].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsDetail, 'Detail Jawaban');
+
+  // ── Sheet 3: Rekap per Elemen Kompetensi ─
+  const kompMap = {};
+  results.forEach(r => {
+    r.details.forEach(d => {
+      if (d.type === 'essay') return; // skip essay for stats
+      const k = d.kompetensi || '(Tidak Ditandai)';
+      if (!kompMap[k]) kompMap[k] = { total: 0, benar: 0, salah: 0, kosong: 0 };
+      kompMap[k].total++;
+      if (d.correct === true) kompMap[k].benar++;
+      else if (d.correct === false) kompMap[k].salah++;
+      else kompMap[k].kosong++;
+    });
+  });
+  const kompHeader = ['Elemen Kompetensi','Total Soal Dijawab','Benar','Salah','Tidak Dijawab','% Benar'];
+  const kompRows = Object.entries(kompMap).map(([k,v]) => [
+    k, v.total, v.benar, v.salah, v.kosong,
+    v.total > 0 ? Math.round(v.benar/v.total*100)+'%' : '0%'
+  ]);
+  const wsKomp = XLSX.utils.aoa_to_sheet([kompHeader, ...kompRows]);
+  wsKomp['!cols'] = [28,20,10,10,16,12].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsKomp, 'Rekap Kompetensi');
+
+  // ── Sheet 4: Log Pelanggaran ──────────────
+  const violHeader = ['Nama','No. Peserta','Waktu','Jenis Pelanggaran'];
+  const violRows = [];
+  results.forEach(r => {
+    if (!r.violations || r.violations.length === 0) {
+      violRows.push([r.name, r.id, '—', 'Tidak ada pelanggaran']);
+    } else {
+      r.violations.forEach(v => violRows.push([r.name, r.id, v.time, v.msg]));
+    }
+  });
+  const wsViol = XLSX.utils.aoa_to_sheet([violHeader, ...violRows]);
+  wsViol['!cols'] = [22,14,12,50].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, wsViol, 'Log Pelanggaran');
+
+  XLSX.writeFile(wb, filename + '.xlsx');
+  toast('File Excel berhasil didownload! ✓', 'ok');
+}
+
+// ══════════════════════════════════════════
+// ADMIN TABS
+// ══════════════════════════════════════════
+function switchAdminTab(tab) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  const ujianPanel  = document.getElementById('admin-ujian-panel');
+  const sidebar     = document.getElementById('admin-sidebar-panel');
+  const main        = document.getElementById('admin-main-panel');
+  const dash        = document.getElementById('admin-dashboard');
+  const layout      = document.querySelector('.admin-layout');
+
+  // Hide all
+  ujianPanel.classList.add('hidden');
+  layout.style.display = 'none';
+  dash.classList.add('hidden');
+
+  if (tab === 'ujian') {
+    ujianPanel.classList.remove('hidden');
+  } else if (tab === 'soal') {
+    layout.style.display = '';
+    sidebar.style.display = '';
+    main.style.display = '';
+    dash.classList.add('hidden');
+    updateAdminSummary();
+  } else if (tab === 'hasil') {
+    layout.style.display = '';
+    sidebar.style.display = 'none';
+    main.style.display = 'none';
+    dash.classList.remove('hidden');
+    renderDashboard();
+  }
+}
+
+// ══════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════
+let dashResults = [];
+let dashSortKey = 'name';
+let dashSortDir = 1; // 1 asc, -1 desc
+let dashSelectedIdx = null;
+
+function getResults() {
+  try { return JSON.parse(localStorage.getItem('secureexam_results') || '[]'); }
+  catch(e) { return []; }
+}
+
+async function renderDashboard() {
+  const examFilter = document.getElementById('dash-filter-exam');
+  const selectedCode = examFilter?.value || '';
+
+  // Show loading state
+  document.getElementById('dash-stats').innerHTML =
+    '<div class="dash-stat" style="grid-column:1/-1;text-align:center;color:var(--muted)"><div class="spinner" style="margin:0 auto"></div></div>';
+
+  // Try cloud first, fall back to localStorage
+  let allResults = null;
+  if (db) {
+    updateCloudBadge('syncing');
+    allResults = await cloudLoadResults(selectedCode || null);
+    updateCloudBadge(allResults !== null ? 'connected' : 'error');
+  }
+  if (allResults === null) {
+    // Fallback: localStorage
+    const local = getResults();
+    allResults = selectedCode ? local.filter(r => r.examCode === selectedCode) : local;
+  }
+
+  dashResults = allResults;
+
+  // Populate exam filter dropdown
+  if (examFilter) {
+    const localAll = getResults();
+    const cloudLabel = db ? ' ☁' : '';
+    // Merge codes from cloud results + local
+    const codes = [...new Set([...allResults, ...localAll].map(r => r.examCode).filter(Boolean))];
+    const cur = examFilter.value;
+    examFilter.innerHTML = `<option value="">Semua Ujian${cloudLabel}</option>` +
+      codes.map(c => {
+        const exam = allExams.find(e => e.code === c);
+        const label = exam ? `${exam.name} (${c})` : c;
+        return `<option value="${c}" ${cur===c?'selected':''}>${label}</option>`;
+      }).join('');
+  }
+
+  // Update tab badge
+  const badge = document.getElementById('tab-hasil-badge');
+  const totalAll = db ? allResults.length : getResults().length;
+  if (badge) { badge.style.display = totalAll > 0 ? '' : 'none'; badge.textContent = totalAll; }
+
+  renderDashStats();
+  renderStudentTable();
+  renderKompChart(dashResults);
+}
+
+function renderDashStats() {
+  const r = dashResults;
+  if (r.length === 0) {
+    document.getElementById('dash-stats').innerHTML = `
+      <div class="dash-stat" style="grid-column:1/-1;text-align:center;color:var(--muted)">
+        Belum ada data hasil ujian
+      </div>`;
+    return;
+  }
+  const scores = r.map(x => x.score);
+  const avg    = Math.round(scores.reduce((a,b)=>a+b,0) / scores.length);
+  const max    = Math.max(...scores);
+  const min    = Math.min(...scores);
+  const withViol = r.filter(x => x.warnCount > 0).length;
+
+  document.getElementById('dash-stats').innerHTML = `
+    <div class="dash-stat">
+      <div class="ds-val">${r.length}</div>
+      <div class="ds-lbl">Total Peserta</div>
+    </div>
+    <div class="dash-stat">
+      <div class="ds-val">${avg}</div>
+      <div class="ds-lbl">Rata-rata Nilai</div>
+      <div class="ds-sub">Min: ${min} — Maks: ${max}</div>
+    </div>
+    <div class="dash-stat">
+      <div class="ds-val" style="color:var(--green)">${r.filter(x=>x.score>=80).length}</div>
+      <div class="ds-lbl">Lulus (≥ 80)</div>
+      <div class="ds-sub">${r.filter(x=>x.score<80).length} peserta di bawah KKM</div>
+    </div>
+    <div class="dash-stat">
+      <div class="ds-val" style="color:${withViol>0?'var(--red)':'var(--green)'}">${withViol}</div>
+      <div class="ds-lbl">Ada Pelanggaran</div>
+      <div class="ds-sub">${r.length - withViol} peserta bersih</div>
+    </div>
+  `;
+}
+
+function renderStudentTable() {
+  const search = (document.getElementById('dash-search')?.value||'').toLowerCase();
+  const scoreF = document.getElementById('dash-filter-score')?.value||'';
+  const violF  = document.getElementById('dash-filter-viol')?.value||'';
+
+  let filtered = dashResults.filter(r => {
+    if (search && !r.name.toLowerCase().includes(search) && !r.id.toLowerCase().includes(search)) return false;
+    if (scoreF === 'high' && r.score < 80) return false;
+    if (scoreF === 'mid'  && (r.score < 60 || r.score >= 80)) return false;
+    if (scoreF === 'low'  && r.score >= 60) return false;
+    if (violF === 'clean' && r.warnCount > 0) return false;
+    if (violF === 'viol'  && r.warnCount === 0) return false;
+    return true;
+  });
+
+  filtered.sort((a,b) => {
+    const va = a[dashSortKey]||'', vb = b[dashSortKey]||'';
+    return (va > vb ? 1 : va < vb ? -1 : 0) * dashSortDir;
+  });
+
+  const empty = document.getElementById('dash-empty');
+  const tbody = document.getElementById('dash-tbody');
+
+  if (filtered.length === 0) {
+    empty.classList.remove('hidden');
+    tbody.innerHTML = '';
+    return;
+  }
+  empty.classList.add('hidden');
+
+  tbody.innerHTML = filtered.map((r, i) => {
+    const scoreClass = r.score >= 80 ? 'score-high' : r.score >= 60 ? 'score-mid' : 'score-low';
+    const origIdx = dashResults.indexOf(r);
+    const examLabel = r.examName || r.examCode || '—';
+    return `
+      <tr onclick="showStudentDetail(${origIdx})" style="cursor:pointer" id="dash-row-${origIdx}" class="${dashSelectedIdx===origIdx?'selected-row':''}">
+        <td><span style="font-family:'DM Mono',monospace">${r.id}</span></td>
+        <td style="font-weight:500">${r.name}</td>
+        <td style="font-size:0.78rem;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${examLabel}">${examLabel}</td>
+        <td><span class="score-chip ${scoreClass}">${r.score}</span></td>
+        <td style="color:var(--green)">${r.correct}</td>
+        <td style="color:var(--red)">${r.wrong}</td>
+        <td style="color:var(--muted)">${r.unanswered}</td>
+        <td>${r.warnCount > 0
+          ? `<span style="color:var(--red);font-weight:600">⚠️ ${r.warnCount}x</span>`
+          : '<span style="color:var(--green)">✅ Bersih</span>'}</td>
+        <td style="font-size:0.78rem;color:var(--muted)">${r.submittedAt}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();downloadExcelSingleByIdx(${origIdx})" title="Download Excel">📥</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteResult(${origIdx})" style="padding:4px 8px" title="Hapus">✕</button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function sortTable(key) {
+  if (dashSortKey === key) dashSortDir *= -1;
+  else { dashSortKey = key; dashSortDir = 1; }
+  // Update header indicators
+  document.querySelectorAll('.data-table th').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+  });
+  const headers = { id:0, name:1, score:2, correct:3, wrong:4, unanswered:5, warnCount:6 };
+  const thIdx = headers[key];
+  if (thIdx !== undefined) {
+    const ths = document.querySelectorAll('#dash-table thead th');
+    ths[thIdx]?.classList.add(dashSortDir===1?'sort-asc':'sort-desc');
+  }
+  renderStudentTable();
+}
+
+function showStudentDetail(idx) {
+  const r = dashResults[idx];
+  if (!r) return;
+  dashSelectedIdx = idx;
+
+  // Highlight row
+  document.querySelectorAll('#dash-tbody tr').forEach(tr => tr.classList.remove('selected-row'));
+  document.getElementById('dash-row-' + idx)?.classList.add('selected-row');
+
+  const panel = document.getElementById('dash-detail');
+  panel.classList.remove('hidden');
+  panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+
+  document.getElementById('dd-name').textContent = `${r.name} — ${r.id}`;
+
+  const scoreClass = r.score >= 80 ? 'var(--green)' : r.score >= 60 ? 'var(--gold)' : 'var(--red)';
+  document.getElementById('dd-stats').innerHTML = `
+    <div class="dash-stat"><div class="ds-val" style="color:${scoreClass}">${r.score}</div><div class="ds-lbl">Nilai</div></div>
+    <div class="dash-stat"><div class="ds-val" style="color:var(--green)">${r.correct}</div><div class="ds-lbl">Benar</div></div>
+    <div class="dash-stat"><div class="ds-val" style="color:var(--red)">${r.wrong}</div><div class="ds-lbl">Salah</div></div>
+    <div class="dash-stat"><div class="ds-val" style="color:${r.warnCount>0?'var(--red)':'var(--green)'}">${r.warnCount}</div><div class="ds-lbl">Pelanggaran</div></div>
+  `;
+
+  // Violations
+  const vw = document.getElementById('dd-viol-wrap');
+  if (r.violations && r.violations.length > 0) {
+    vw.innerHTML = `
+      <div style="font-size:0.8rem;font-weight:600;color:var(--red);margin-bottom:8px">🚨 Log Pelanggaran</div>
+      ${r.violations.map(v=>`
+        <div class="viol-item"><span class="viol-time">${v.time}</span><span>${v.msg}</span></div>
+      `).join('')}`;
+  } else {
+    vw.innerHTML = `<div style="font-size:0.85rem;color:var(--green);margin-bottom:8px">✅ Tidak ada pelanggaran tercatat</div>`;
+  }
+
+  // Per-competency breakdown for this student
+  const kw = document.getElementById('dd-komp-wrap');
+  const kompMap = {};
+  (r.details||[]).filter(d=>d.type!=='essay').forEach(d => {
+    const k = d.kompetensi || '(Tidak Ditandai)';
+    if (!kompMap[k]) kompMap[k] = { benar:0, total:0 };
+    kompMap[k].total++;
+    if (d.correct === true) kompMap[k].benar++;
+  });
+  const kompEntries = Object.entries(kompMap);
+  if (kompEntries.length > 0) {
+    kw.innerHTML = `
+      <div style="font-size:0.8rem;font-weight:600;color:var(--gold);margin-bottom:10px">🏷 Rekap per Elemen Kompetensi</div>
+      <div class="komp-chart">
+        ${kompEntries.map(([k,v]) => {
+          const pct = Math.round(v.benar/v.total*100);
+          const color = pct>=80?'var(--green)':pct>=60?'var(--gold)':'var(--red)';
+          return `<div class="komp-row">
+            <div class="komp-label" title="${k}">${k}</div>
+            <div class="komp-bar-wrap"><div class="komp-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+            <div class="komp-pct">${pct}%</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } else { kw.innerHTML = ''; }
+
+  // Answer table
+  document.getElementById('dd-answers-body').innerHTML = (r.details||[]).map((d,i) => {
+    const st = d.type==='essay' ? '<span style="color:var(--muted)">Essay</span>'
+             : d.correct===true  ? '<span style="color:var(--green)">✅ Benar</span>'
+             : d.correct===false ? '<span style="color:var(--red)">❌ Salah</span>'
+             : '<span style="color:var(--muted)">⭕ Kosong</span>';
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;color:var(--muted)">${i+1}</td>
+      <td>${d.kompetensi ? `<span class="badge badge-gold" style="font-size:0.65rem">${d.kompetensi}</span>` : '—'}</td>
+      <td style="max-width:280px;font-size:0.82rem">${d.q}</td>
+      <td>${d.type==='essay'?'Essay':'PG'}</td>
+      <td style="font-weight:600">${d.a}</td>
+      <td style="color:var(--muted)">${d.type==='essay'?'—':(d.expected||d.a||'—')}</td>
+      <td>${st}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--gold)">${d.pts}</td>
+    </tr>`;
+  }).join('');
+}
+
+function closeDashDetail() {
+  document.getElementById('dash-detail').classList.add('hidden');
+  dashSelectedIdx = null;
+  document.querySelectorAll('#dash-tbody tr').forEach(tr => tr.classList.remove('selected-row'));
+}
+
+function renderKompChart(results) {
+  const kompMap = {};
+  results.forEach(r => {
+    (r.details||[]).filter(d=>d.type!=='essay').forEach(d => {
+      const k = d.kompetensi || '(Tidak Ditandai)';
+      if (!kompMap[k]) kompMap[k] = { benar:0, total:0 };
+      kompMap[k].total++;
+      if (d.correct===true) kompMap[k].benar++;
+    });
+  });
+  const entries = Object.entries(kompMap).sort((a,b)=>b[1].total-a[1].total);
+  const chart = document.getElementById('dash-komp-chart');
+  if (!entries.length) {
+    chart.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Belum ada data kompetensi.</div>';
+    return;
+  }
+  chart.innerHTML = entries.map(([k,v]) => {
+    const pct = Math.round(v.benar/v.total*100);
+    const color = pct>=80?'var(--green)':pct>=60?'var(--gold)':'var(--red)';
+    return `<div class="komp-row">
+      <div class="komp-label" title="${k}">${k}</div>
+      <div class="komp-bar-wrap"><div class="komp-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="komp-pct" style="color:${color}">${pct}% <span style="font-size:0.7rem;color:var(--muted)">(${v.benar}/${v.total})</span></div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteResult(idx) {
+  if (!confirm('Hapus data hasil ujian peserta ini?')) return;
+  const r = dashResults[idx];
+  // Delete from cloud if available
+  if (r?._cloudId) await cloudDeleteResult(r._cloudId);
+  // Delete from localStorage
+  try {
+    const local = getResults().filter(x => !(x.id===r.id && x.examCode===r.examCode && x.submittedAt===r.submittedAt));
+    localStorage.setItem('secureexam_results', JSON.stringify(local));
+  } catch(e) {}
+  closeDashDetail();
+  renderDashboard();
+  toast('Data peserta dihapus', 'ok');
+}
+
+function downloadExcelAll() {
+  // dashResults already loaded from cloud by renderDashboard — use directly
+  const toDownload = dashResults.length ? dashResults : getResults();
+  if (!toDownload.length) { toast('Tidak ada data hasil ujian', 'error'); return; }
+  const examFilter = document.getElementById('dash-filter-exam');
+  const label = examFilter?.value || 'Semua-Ujian';
+  buildExcel(toDownload, `Rekap-${label}`);
+}
+
+async function clearResultsAdmin() {
+  const examFilter = document.getElementById('dash-filter-exam');
+  const selectedCode = examFilter?.value || '';
+  const src = db ? 'cloud + lokal' : 'lokal';
+  const msg = selectedCode
+    ? `Hapus semua hasil ujian untuk kode "${selectedCode}" dari ${src}?`
+    : `Hapus SEMUA data hasil ujian dari ${src}?`;
+  if (!confirm(msg + ' Tindakan ini tidak bisa dibatalkan.')) return;
+  // Clear localStorage
+  if (selectedCode) {
+    localStorage.setItem('secureexam_results', JSON.stringify(getResults().filter(r => r.examCode !== selectedCode)));
+  } else {
+    localStorage.removeItem('secureexam_results');
+  }
+  // Clear cloud
+  if (db) {
+    try {
+      if (selectedCode) {
+        await cloudDeleteResultsByExam(selectedCode);
+      } else {
+        const snap = await db.collection('se_results').get();
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+    } catch(e) { toast('Hapus cloud gagal sebagian: ' + e.message, 'error'); }
+  }
+  dashResults = [];
+  closeDashDetail();
+  renderDashboard();
+  toast('Data hasil ujian dihapus', 'ok');
+}
+
+function downloadExcelSingleByIdx(idx) {
+  const r = dashResults[idx];
+  if (!r) return;
+  buildExcel([r], `Hasil-${r.id}`);
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+let toastTimer;
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type==='error'?' toast-error':type==='ok'?' toast-ok':'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 3000);
+}
+
+function showFileProtocolHelp() {
+  document.getElementById('modal-file-protocol').classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+(function init() {
+  // Detect file:// protocol and show warning
+  if (location.protocol === 'file:') {
+    document.getElementById('file-protocol-warning').classList.remove('hidden');
+  }
+
+  loadAllExams();
+
+  // Migrate legacy single-config to multi-exam
+  const legacy = localStorage.getItem('secureexam_config');
+  if (legacy && allExams.length === 0) {
+    try {
+      const cfg = JSON.parse(legacy);
+      if (cfg && cfg.code) {
+        cfg.id = cfg.id || genId();
+        allExams.push(cfg);
+        saveAllExams();
+        localStorage.removeItem('secureexam_config');
+      }
+    } catch(e) {}
+  }
+
+  // Load Firebase config if previously saved
+  loadSavedFirebaseConfig();
+
+  document.getElementById('exam-duration').addEventListener('input', updateAdminSummary);
+  renderQList();
+  updateAdminSummary();
+})();
+</script>
+</body>
+</html>
