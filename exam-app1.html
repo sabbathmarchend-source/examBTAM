@@ -2679,9 +2679,9 @@ function initAntiCheat() {
   window.onresize = () => {
     if (!examActive) return;
     let currentH = window.innerHeight;
-    // Jika tinggi layar berkurang lebih dari 15%, asumsikan split screen atau keyboard aktif
+    // Jika tinggi layar berkurang lebih dari 30%, asumsikan split screen atau keyboard aktif
     // Namun untuk split screen biasanya perubahannya permanen & drastis
-    if (Math.abs(initialH - currentH) > (initialH * 0.15)) {
+    if (Math.abs(initialH - currentH) > (initialH * 0.3)) {
       triggerViolation("Perubahan Ukuran Layar (Indikasi Split Screen)");
     }
   };
@@ -3519,17 +3519,6 @@ function showFileProtocolHelp() {
   updateAdminSummary();
 })();
 </script>
-
-<div id="violation-shield">
-  <div class="shield-box">
-    <div class="shield-icon">⚠️</div>
-    <h3>Pelanggaran Terdeteksi</h3>
-    <p class="shield-msg" style="margin: 15px 0; opacity: 0.8;"></p>
-    <button class="btn btn-blue" onclick="document.getElementById('violation-shield').style.display='none'" style="width: 100%;">
-      Saya Mengerti, Lanjutkan Ujian
-    </button>
-  </div>
-</div>
 
   
 </body>
