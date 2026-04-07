@@ -2497,6 +2497,8 @@ async function startExam() {
   violations  = [];
   warnCount   = 0;
   currentQ    = 0;
+  _lastViolationTime = 0;
+  _lastViolationMsg  = '';
 
   qOrder = cfg.questions.map((_,i) => i);
   if (acSettings.shuffle) qOrder = qOrder.sort(() => Math.random() - 0.5);
@@ -2779,31 +2781,50 @@ function stopDevToolsDetection() {
   clearInterval(devtoolsTimer);
 }
 
+// ── Violation cooldown — prevent same violation firing twice in 1.5s ──
+let _lastViolationTime = 0;
+let _lastViolationMsg  = '';
+
 function triggerViolation(msg) {
   if (!examActive) return;
+
+  // Debounce: ignore if same message fired within 1.5 seconds
+  const now = Date.now();
+  if (msg === _lastViolationMsg && now - _lastViolationTime < 1500) return;
+  _lastViolationTime = now;
+  _lastViolationMsg  = msg;
+
   warnCount++;
   const timestamp = new Date().toLocaleTimeString('id-ID');
   violations.push({ time: timestamp, msg });
 
   const maxWarn = examConfig.maxWarnings || 3;
-  document.getElementById('warn-count-display').textContent = warnCount;
-  document.getElementById('warn-max').textContent = maxWarn;
-  document.getElementById('warn-message').textContent = msg + '. Tindakan ini dicatat dan dilaporkan kepada pengawas.';
   document.getElementById('warn-display').textContent = warnCount;
-  document.getElementById('warning-overlay').classList.remove('hidden');
 
   if (warnCount >= maxWarn) {
+    // Stop exam immediately — no button required from student
+    examActive = false; // prevent further violations
     document.getElementById('warning-overlay').innerHTML = `
       <div class="warn-icon">🚫</div>
       <h2>UJIAN DIHENTIKAN</h2>
-      <p>Anda telah melebihi batas peringatan (${maxWarn}x). Ujian dihentikan secara otomatis.</p>
-      <button class="btn btn-danger" onclick="submitExam(false, true)">Lihat Hasil Ujian</button>
+      <p>Anda telah melebihi batas peringatan (${maxWarn}x).<br>Ujian dihentikan secara otomatis. Hasil Anda sedang disimpan…</p>
+      <div style="margin-top:12px"><div class="spinner" style="margin:0 auto;border-color:rgba(255,255,255,0.3);border-top-color:#fff;width:28px;height:28px"></div></div>
     `;
+    document.getElementById('warning-overlay').classList.remove('hidden');
+    // Auto-submit after brief delay so student can read the message
+    setTimeout(() => submitExam(false, true), 1800);
+  } else {
+    document.getElementById('warn-count-display').textContent = warnCount;
+    document.getElementById('warn-max').textContent = maxWarn;
+    document.getElementById('warn-message').textContent = msg + '. Tindakan ini dicatat dan dilaporkan kepada pengawas.';
+    document.getElementById('warning-overlay').classList.remove('hidden');
   }
 }
 
 function dismissWarning() {
   document.getElementById('warning-overlay').classList.add('hidden');
+  _lastViolationTime = 0; // allow next violation to register immediately
+  _lastViolationMsg  = '';
   if (acSettings.fullscreen && !document.fullscreenElement) {
     document.documentElement.requestFullscreen().catch(()=>{});
   }
@@ -2828,6 +2849,10 @@ async function submitExam(timeUp=false, forceStop=false) {
   examActive = false;
   clearInterval(timerInterval);
   removeAntiCheat();
+  _lastViolationMsg = ''; // reset debounce
+
+  // Hide warning overlay so result screen is visible
+  document.getElementById('warning-overlay').classList.add('hidden');
 
   if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
 
