@@ -501,6 +501,39 @@
   .cloud-step-body a:hover { text-decoration:underline; }
   .cloud-step-body code { font-family:'JetBrains Mono',monospace; font-size:0.76rem; background:var(--blue-lt); padding:1px 5px; border-radius:3px; color:var(--blue); }
 
+
+  /* ── EXAM TYPE SELECTOR ── */
+  .exam-type-wrap { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+  .exam-type-btn {
+    padding:18px 14px; border-radius:var(--radius); border:2px solid var(--border);
+    background:var(--surface); cursor:pointer; transition:all 0.15s;
+    text-align:center; display:flex; flex-direction:column; align-items:center; gap:8px;
+    box-shadow:var(--shadow);
+  }
+  .exam-type-btn:hover { border-color:var(--blue-md); background:var(--blue-lt); }
+  .exam-type-btn.selected { border-color:var(--blue); background:var(--blue-lt); box-shadow:0 0 0 3px rgba(29,78,216,0.1); }
+  .exam-type-btn.disabled-type { opacity:0.45; cursor:not-allowed; }
+  .exam-type-btn.disabled-type:hover { border-color:var(--border); background:var(--surface); }
+  .exam-type-icon  { font-size:1.8rem; }
+  .exam-type-label { font-weight:700; font-size:0.95rem; color:var(--text); }
+  .exam-type-desc  { font-size:0.76rem; color:var(--muted); line-height:1.4; }
+  .exam-type-lock  { font-size:0.72rem; color:var(--red); font-weight:600; margin-top:2px; }
+
+  /* ── COMPARISON TABLE ── */
+  .cmp-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+  .cmp-table th {
+    padding:9px 14px; text-align:left; font-size:0.7rem; font-weight:700;
+    color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;
+    border-bottom:2px solid var(--border); background:var(--bg-3); white-space:nowrap;
+  }
+  .cmp-table td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .cmp-table tr:hover td { background:var(--blue-lt); }
+  .delta-up   { color:var(--green); font-weight:700; }
+  .delta-down { color:var(--red);   font-weight:700; }
+  .delta-same { color:var(--muted); }
+  .delta-bar-wrap { height:6px; background:var(--border); border-radius:3px; overflow:hidden; min-width:80px; }
+  .delta-bar-fill { height:100%; border-radius:3px; }
+
   /* ════════════════════════════════════
      ATTEMPT MANAGEMENT
   ════════════════════════════════════ */
@@ -631,6 +664,7 @@
     <div class="admin-tab active" id="tab-ujian" onclick="switchAdminTab('ujian')">📚 Kelola Ujian <span id="tab-ujian-badge" class="badge badge-gold" style="display:none">0</span></div>
     <div class="admin-tab" id="tab-soal" onclick="switchAdminTab('soal')">✏️ Editor Soal</div>
     <div class="admin-tab" id="tab-hasil" onclick="switchAdminTab('hasil')">📊 Hasil Ujian <span id="tab-hasil-badge" style="display:none;margin-left:4px" class="badge badge-gold">0</span></div>
+    <div class="admin-tab" id="tab-perbandingan" onclick="switchAdminTab('perbandingan')">📈 Pre/Post Test</div>
   </div>
 
   <!-- ── KELOLA UJIAN PANEL ── -->
@@ -843,6 +877,58 @@
       </div>
     </div>
   </div><!-- /.admin-layout -->
+
+  <!-- ── PERBANDINGAN PRE/POST TEST PANEL ── -->
+  <div id="admin-perbandingan-panel" class="hidden" style="padding:32px 40px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="section-title" style="margin:0">📈 Perbandingan Pre Test & Post Test</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:4px">Selisih nilai per peserta antara Pre Test dan Post Test</div>
+      </div>
+      <div class="flex-row">
+        <select id="cmp-filter-exam" style="min-width:220px" onchange="renderComparison()">
+          <option value="">— Pilih Ujian —</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="renderComparison()">🔄 Refresh</button>
+        <button class="btn btn-gold btn-sm" onclick="downloadExcelComparison()">📥 Download Excel</button>
+      </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div id="cmp-stats" class="dash-stats" style="margin-bottom:24px"></div>
+
+    <!-- Comparison table -->
+    <div class="card" style="padding:0;overflow:auto;margin-bottom:24px">
+      <table class="cmp-table" id="cmp-table">
+        <thead>
+          <tr>
+            <th>No. Peserta</th>
+            <th>Nama</th>
+            <th>Pre Test</th>
+            <th>Post Test</th>
+            <th>Selisih</th>
+            <th>Perubahan</th>
+            <th>Pelanggaran Pre</th>
+            <th>Pelanggaran Post</th>
+          </tr>
+        </thead>
+        <tbody id="cmp-tbody"></tbody>
+      </table>
+      <div id="cmp-empty" class="hidden" style="padding:48px;text-align:center;color:var(--muted)">
+        <div style="font-size:2.5rem;margin-bottom:12px">📭</div>
+        <p>Pilih ujian dan pastikan ada peserta yang sudah menyelesaikan Pre Test dan Post Test.</p>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div style="font-size:0.78rem;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap">
+      <span><span class="delta-up">↑ Naik</span> — nilai Post Test lebih tinggi</span>
+      <span><span class="delta-down">↓ Turun</span> — nilai Post Test lebih rendah</span>
+      <span><span class="delta-same">→ Sama</span> — tidak ada perubahan</span>
+      <span style="color:var(--muted-2)">⚫ = belum mengerjakan salah satu ujian</span>
+    </div>
+  </div>
+
 </div><!-- /#screen-admin -->
 
 <!-- ══════════════════════════════════════
@@ -861,11 +947,27 @@
       </div>
       <div class="form-group">
         <label>No. Peserta / NIM / NIS</label>
-        <input type="text" id="student-id" placeholder="contoh: 2604010101">
+        <input type="text" id="student-id" placeholder="contoh: 2604010101" oninput="checkPostTestEligibility()">
       </div>
       <div class="form-group">
         <label>Kode Ujian</label>
-        <input type="text" id="entry-code" placeholder="Masukkan kode dari pengawas" style="text-transform:uppercase;letter-spacing:2px">
+        <input type="text" id="entry-code" placeholder="Masukkan kode dari pengawas" style="text-transform:uppercase;letter-spacing:2px" oninput="checkPostTestEligibility()">
+      </div>
+      <div class="form-group">
+        <label>Jenis Ujian</label>
+        <div class="exam-type-wrap" id="exam-type-wrap">
+          <div class="exam-type-btn" id="type-btn-pretest" onclick="selectExamType('pretest')">
+            <div class="exam-type-icon">📝</div>
+            <div class="exam-type-label">Pre Test</div>
+            <div class="exam-type-desc">Ujian sebelum pelatihan</div>
+          </div>
+          <div class="exam-type-btn" id="type-btn-posttest" onclick="selectExamType('posttest')">
+            <div class="exam-type-icon">🏆</div>
+            <div class="exam-type-label">Post Test</div>
+            <div class="exam-type-desc">Ujian setelah pelatihan</div>
+          </div>
+        </div>
+        <div id="exam-type-info" style="font-size:0.78rem;color:var(--muted);margin-top:6px;text-align:center"></div>
       </div>
     </div>
 
@@ -1273,19 +1375,20 @@ let acSettings  = {};
 let qOrder      = [];    // Possibly shuffled question order
 
 // ── Attempt tracking helpers ──────────────
-function attemptKey(examCode, studentId) {
-  return examCode.trim().toUpperCase() + '__' + studentId.trim().toLowerCase();
+function attemptKey(examCode, studentId, examType) {
+  const t = (examType || 'pretest').toLowerCase();
+  return examCode.trim().toUpperCase() + '__' + studentId.trim().toLowerCase() + '__' + t;
 }
-function hasAttempted(examCode, studentId) {
+function hasAttempted(examCode, studentId, examType) {
   try {
     const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
-    return !!a[attemptKey(examCode, studentId)];
+    return !!a[attemptKey(examCode, studentId, examType)];
   } catch(e) { return false; }
 }
-function recordAttempt(examCode, studentId) {
+function recordAttempt(examCode, studentId, examType) {
   try {
     const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
-    a[attemptKey(examCode, studentId)] = new Date().toLocaleString('id-ID');
+    a[attemptKey(examCode, studentId, examType)] = new Date().toLocaleString('id-ID');
     localStorage.setItem('secureexam_attempts', JSON.stringify(a));
   } catch(e) {}
 }
@@ -1295,13 +1398,22 @@ function getAttemptsForExam(examCode) {
     const prefix = examCode.trim().toUpperCase() + '__';
     return Object.entries(a)
       .filter(([k]) => k.startsWith(prefix))
-      .map(([k, time]) => ({ studentId: k.replace(prefix, ''), time }));
+      .map(([k, time]) => {
+        const parts = k.replace(prefix, '').split('__');
+        return { studentId: parts[0], examType: parts[1] || 'pretest', time };
+      });
   } catch(e) { return []; }
 }
-function deleteAttempt(examCode, studentId) {
+function deleteAttempt(examCode, studentId, examType) {
   try {
     const a = JSON.parse(localStorage.getItem('secureexam_attempts') || '{}');
-    delete a[attemptKey(examCode, studentId)];
+    if (examType) {
+      delete a[attemptKey(examCode, studentId, examType)];
+    } else {
+      // delete both pre and post
+      delete a[attemptKey(examCode, studentId, 'pretest')];
+      delete a[attemptKey(examCode, studentId, 'posttest')];
+    }
     localStorage.setItem('secureexam_attempts', JSON.stringify(a));
   } catch(e) {}
 }
@@ -1636,31 +1748,37 @@ async function cloudDeleteResultsByExam(examCode) {
   } catch(e) {}
 }
 
-async function cloudCheckAttempt(examCode, studentId) {
+async function cloudCheckAttempt(examCode, studentId, examType) {
   if (!db) return false;
   try {
-    const key = attemptKey(examCode, studentId);
+    const key = attemptKey(examCode, studentId, examType);
     const doc = await db.collection('se_attempts').doc(key).get();
     return doc.exists;
   } catch(e) { return false; }
 }
 
-async function cloudRecordAttempt(examCode, studentId) {
+async function cloudRecordAttempt(examCode, studentId, examType) {
   if (!db) return;
   try {
-    const key = attemptKey(examCode, studentId);
+    const key = attemptKey(examCode, studentId, examType);
     await db.collection('se_attempts').doc(key).set({
-      examCode, studentId,
+      examCode, studentId, examType,
       time: new Date().toLocaleString('id-ID'),
       _ts: firebase.firestore.FieldValue.serverTimestamp()
     });
   } catch(e) {}
 }
 
-async function cloudDeleteAttempt(examCode, studentId) {
+async function cloudDeleteAttempt(examCode, studentId, examType) {
   if (!db) return;
   try {
-    await db.collection('se_attempts').doc(attemptKey(examCode, studentId)).delete();
+    if (examType) {
+      await db.collection('se_attempts').doc(attemptKey(examCode, studentId, examType)).delete();
+    } else {
+      // delete both pre and post
+      await db.collection('se_attempts').doc(attemptKey(examCode, studentId, 'pretest')).delete().catch(()=>{});
+      await db.collection('se_attempts').doc(attemptKey(examCode, studentId, 'posttest')).delete().catch(()=>{});
+    }
   } catch(e) {}
 }
 
@@ -1884,9 +2002,16 @@ function showScreen(name) {
   document.getElementById('screen-' + name).classList.remove('hidden');
   if (name !== 'exam') stopExam();
   if (name === 'entry') {
-    // Reset blocked state
     document.getElementById('entry-blocked').classList.add('hidden');
     document.querySelector('#screen-entry .btn-gold').style.display = '';
+    // Reset exam type selection fully
+    selectedExamType = null;
+    document.getElementById('type-btn-pretest')?.classList.remove('selected');
+    const postBtn = document.getElementById('type-btn-posttest');
+    postBtn?.classList.remove('selected', 'disabled-type');
+    postBtn?.querySelector('.exam-type-lock')?.remove();
+    const info = document.getElementById('exam-type-info');
+    if (info) { info.textContent = ''; }
   }
 }
 
@@ -2066,39 +2191,57 @@ async function renderAttemptList(examCode) {
   const list = document.getElementById('ma-list');
   list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:12px"><div class="spinner" style="display:inline-block;margin-right:8px"></div>Memuat data...</div>';
 
-  // Merge localStorage + cloud attempts
   let attempts = getAttemptsForExam(examCode);
   if (db) {
     try {
       const snap = await db.collection('se_attempts').where('examCode','==',examCode).get();
       snap.docs.forEach(d => {
         const data = d.data();
-        if (!attempts.find(a => a.studentId === data.studentId)) {
-          attempts.push({ studentId: data.studentId, time: data.time || '—', _cloudId: d.id });
+        const key = data.studentId + '__' + (data.examType || 'pretest');
+        if (!attempts.find(a => a.studentId === data.studentId && a.examType === (data.examType||'pretest'))) {
+          attempts.push({ studentId: data.studentId, examType: data.examType || 'pretest', time: data.time || '—', _cloudId: d.id });
         }
       });
     } catch(e) {}
   }
+
   if (attempts.length === 0) {
     list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:12px">Belum ada peserta yang mengikuti ujian ini.</div>';
     return;
   }
-  list.innerHTML = attempts.map(a => `
-    <div class="attempt-item">
-      <div>
-        <div class="a-id">No. ${a.studentId}</div>
-        <div class="a-time">${a.time}${db ? ' ☁' : ''}</div>
+
+  // Group by studentId
+  const byStudent = {};
+  attempts.forEach(a => {
+    if (!byStudent[a.studentId]) byStudent[a.studentId] = {};
+    byStudent[a.studentId][a.examType || 'pretest'] = a.time;
+  });
+
+  list.innerHTML = Object.entries(byStudent).map(([sid, types]) => `
+    <div class="attempt-item" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <div class="a-id">No. ${sid}</div>
+        <button class="btn btn-ghost btn-sm" onclick="resetOneAttempt('${examCode}','${sid}',null)">↩ Reset Semua</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="resetOneAttempt('${examCode}','${a.studentId}')">↩ Izinkan Ulang</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${types.pretest ? `<span class="badge badge-blue">Pre Test: ${types.pretest}
+          <button onclick="resetOneAttempt('${examCode}','${sid}','pretest')" style="background:none;border:none;cursor:pointer;color:var(--red);margin-left:4px;font-size:0.7rem">✕</button>
+        </span>` : '<span class="badge" style="background:var(--bg-3);color:var(--muted-2)">Pre Test: belum</span>'}
+        ${types.posttest ? `<span class="badge badge-green">Post Test: ${types.posttest}
+          <button onclick="resetOneAttempt('${examCode}','${sid}','posttest')" style="background:none;border:none;cursor:pointer;color:var(--red);margin-left:4px;font-size:0.7rem">✕</button>
+        </span>` : '<span class="badge" style="background:var(--bg-3);color:var(--muted-2)">Post Test: belum</span>'}
+      </div>
     </div>`).join('');
 }
 
-async function resetOneAttempt(examCode, studentId) {
-  deleteAttempt(examCode, studentId);
-  await cloudDeleteAttempt(examCode, studentId);
+async function resetOneAttempt(examCode, studentId, examType) {
+  const typeLabel = examType ? (examType === 'pretest' ? 'Pre Test' : 'Post Test') : 'semua ujian';
+  if (!confirm(`Reset ${typeLabel} untuk peserta "${studentId}"?`)) return;
+  deleteAttempt(examCode, studentId, examType);
+  await cloudDeleteAttempt(examCode, studentId, examType);
   await renderAttemptList(examCode);
   renderExamList();
-  toast('Peserta dapat mengikuti ujian kembali', 'ok');
+  toast('Percobaan direset — peserta dapat mengikuti ujian kembali', 'ok');
 }
 
 async function resetAllAttemptsModal() {
@@ -2420,6 +2563,62 @@ function importJSON() {
 }
 
 // ══════════════════════════════════════════
+// EXAM TYPE SELECTION
+// ══════════════════════════════════════════
+let selectedExamType = null; // 'pretest' | 'posttest'
+
+function selectExamType(type) {
+  selectedExamType = type;
+  document.getElementById('type-btn-pretest').classList.toggle('selected', type === 'pretest');
+  document.getElementById('type-btn-posttest').classList.toggle('selected', type === 'posttest');
+  document.getElementById('exam-type-info').textContent = '';
+}
+
+// Called when student-id or entry-code changes — checks if posttest is allowed
+async function checkPostTestEligibility() {
+  const sid  = document.getElementById('student-id').value.trim();
+  const code = document.getElementById('entry-code').value.trim().toUpperCase();
+  const btn  = document.getElementById('type-btn-posttest');
+  const info = document.getElementById('exam-type-info');
+
+  if (!sid || !code) {
+    btn.classList.remove('disabled-type');
+    btn.querySelector('.exam-type-lock')?.remove();
+    info.textContent = '';
+    return;
+  }
+
+  // Check if pre test has been done
+  const donePre = hasAttempted(code, sid, 'pretest') ||
+    (db ? await cloudCheckAttempt(code, sid, 'pretest').catch(() => false) : false);
+
+  const lockEl = btn.querySelector('.exam-type-lock');
+  if (!donePre) {
+    btn.classList.add('disabled-type');
+    if (!lockEl) {
+      const span = document.createElement('div');
+      span.className = 'exam-type-lock';
+      span.textContent = '🔒 Selesaikan Pre Test dulu';
+      btn.appendChild(span);
+    }
+    // Deselect posttest if currently selected
+    if (selectedExamType === 'posttest') {
+      selectedExamType = null;
+      btn.classList.remove('selected');
+      info.textContent = '⚠️ Anda harus menyelesaikan Pre Test terlebih dahulu sebelum Post Test.';
+      info.style.color = 'var(--red)';
+    }
+  } else {
+    btn.classList.remove('disabled-type');
+    lockEl?.remove();
+    if (selectedExamType === 'posttest') {
+      info.textContent = '✓ Pre Test sudah selesai — Post Test tersedia.';
+      info.style.color = 'var(--green)';
+    }
+  }
+}
+
+// ══════════════════════════════════════════
 // STUDENT ENTRY
 // ══════════════════════════════════════════
 async function startExam() {
@@ -2433,14 +2632,16 @@ async function startExam() {
 
   if (!name || !sid) { toast('Isi nama dan nomor peserta!', 'error'); return; }
   if (!code)         { toast('Isi kode ujian!', 'error'); return; }
+  if (!selectedExamType) {
+    toast('Pilih jenis ujian: Pre Test atau Post Test!', 'error');
+    return;
+  }
   if (!agreed)       { toast('Anda harus menyetujui peraturan ujian!', 'error'); return; }
 
-  // ── Find exam ────────────────────────────
-  // 1. Check localStorage first (fast, works offline for admin device)
+  // ── Find exam ──────────────────────────────
   loadAllExams();
   let cfg = findExamByCode(code);
 
-  // 2. Check legacy single-config format
   if (!cfg) {
     try {
       const legacy = JSON.parse(localStorage.getItem('secureexam_config') || 'null');
@@ -2448,7 +2649,6 @@ async function startExam() {
     } catch(e) {}
   }
 
-  // 3. Fetch from cloud (covers all other devices — HP peserta, dll)
   if (!cfg) {
     if (!db) {
       toast('Kode ujian tidak ditemukan. Pastikan Anda terhubung ke cloud atau hubungi pengawas.', 'error');
@@ -2462,7 +2662,6 @@ async function startExam() {
     startBtn.disabled = false;
     startBtn.textContent = origText;
     if (cfg) {
-      // Cache locally so subsequent lookups are fast
       if (!allExams.find(e => e.id === cfg.id)) {
         allExams.push(cfg);
         saveAllExams();
@@ -2479,19 +2678,41 @@ async function startExam() {
     return;
   }
 
-  // ── ONE-TIME ATTEMPT CHECK ──────────────
-  // Check localStorage first (fast), then cloud (authoritative)
-  let alreadyAttempted = hasAttempted(code, sid);
+  // ── Post Test: pastikan Pre Test sudah selesai ──
+  if (selectedExamType === 'posttest') {
+    let donePre = hasAttempted(code, sid, 'pretest');
+    if (!donePre && db) {
+      try {
+        const startBtn = document.querySelector('#screen-entry .btn-gold');
+        startBtn.disabled = true;
+        startBtn.textContent = '⏳ Memeriksa Pre Test...';
+        donePre = await cloudCheckAttempt(code, sid, 'pretest');
+        startBtn.disabled = false;
+        startBtn.textContent = 'Mulai Ujian →';
+      } catch(e) {}
+    }
+    if (!donePre) {
+      document.getElementById('entry-blocked-msg').textContent =
+        `"${name}" belum menyelesaikan Pre Test untuk ujian "${cfg.name}". Selesaikan Pre Test terlebih dahulu sebelum mengerjakan Post Test.`;
+      document.getElementById('entry-blocked').classList.remove('hidden');
+      document.querySelector('#screen-entry .btn-gold').style.display = 'none';
+      return;
+    }
+  }
+
+  // ── One-time attempt check ──────────────────
+  let alreadyAttempted = hasAttempted(code, sid, selectedExamType);
   if (!alreadyAttempted && db) {
     try {
       updateCloudBadge('syncing');
-      alreadyAttempted = await cloudCheckAttempt(code, sid);
+      alreadyAttempted = await cloudCheckAttempt(code, sid, selectedExamType);
       updateCloudBadge('connected');
     } catch(e) { updateCloudBadge('connected'); }
   }
   if (alreadyAttempted) {
+    const typeLabel = selectedExamType === 'pretest' ? 'Pre Test' : 'Post Test';
     document.getElementById('entry-blocked-msg').textContent =
-      `"${name}" dengan No. Peserta ${sid} sudah pernah mengikuti ujian "${cfg.name}". Setiap peserta hanya diizinkan satu kali percobaan. Hubungi pengawas jika ada kesalahan.`;
+      `"${name}" dengan No. Peserta ${sid} sudah pernah mengikuti ${typeLabel} untuk ujian "${cfg.name}". Hubungi pengawas jika ada kesalahan.`;
     document.getElementById('entry-blocked').classList.remove('hidden');
     document.querySelector('#screen-entry .btn-gold').style.display = 'none';
     return;
@@ -2499,7 +2720,7 @@ async function startExam() {
 
   examConfig  = cfg;
   acSettings  = cfg.ac || {};
-  studentInfo = { name, id: sid };
+  studentInfo = { name, id: sid, examType: selectedExamType };
   answers     = {};
   violations  = [];
   warnCount   = 0;
@@ -2512,6 +2733,10 @@ async function startExam() {
   if (acSettings.shuffle) qOrder = qOrder.sort(() => Math.random() - 0.5);
 
   timeLeft = (cfg.duration || 60) * 60;
+
+  // Show exam type badge in topbar
+  const typeLabel = selectedExamType === 'pretest' ? 'Pre Test' : 'Post Test';
+  document.querySelector('.exam-topbar .logo').textContent = `🔒 Ujian Aman — ${typeLabel}`;
 
   showScreen('exam');
   renderExam();
@@ -2888,9 +3113,10 @@ async function submitExam(timeUp=false, forceStop=false) {
 
   if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
 
-  // Record attempt
-  recordAttempt(examConfig.code, studentInfo.id);
-  cloudRecordAttempt(examConfig.code, studentInfo.id);
+  // Record attempt — with examType
+  const examType = studentInfo.examType || 'pretest';
+  recordAttempt(examConfig.code, studentInfo.id, examType);
+  cloudRecordAttempt(examConfig.code, studentInfo.id, examType);
 
   // Calculate score
   let correct = 0, wrong = 0, unanswered = 0, totalPossible = 0, earned = 0;
@@ -2929,6 +3155,7 @@ async function submitExam(timeUp=false, forceStop=false) {
     id: studentInfo.id,
     examName: examConfig.name,
     examCode: examConfig.code,
+    examType: studentInfo.examType || 'pretest',
     submittedAt: new Date().toLocaleString('id-ID'),
     score, correct, wrong, unanswered,
     violations, warnCount,
@@ -2964,7 +3191,8 @@ async function submitExam(timeUp=false, forceStop=false) {
 
   // Set result values
   try {
-    document.getElementById('result-name').textContent = `${studentInfo.name} — ${studentInfo.id}`;
+    const typeLabel = (studentInfo.examType === 'posttest') ? 'Post Test' : 'Pre Test';
+    document.getElementById('result-name').textContent = `${studentInfo.name} — ${studentInfo.id} (${typeLabel})`;
     document.getElementById('result-score').textContent = score;
   } catch(e) {}
 
@@ -3069,12 +3297,14 @@ function switchAdminTab(tab) {
   const sidebar     = document.getElementById('admin-sidebar-panel');
   const main        = document.getElementById('admin-main-panel');
   const dash        = document.getElementById('admin-dashboard');
+  const cmpPanel    = document.getElementById('admin-perbandingan-panel');
   const layout      = document.querySelector('.admin-layout');
 
   // Hide all
   ujianPanel.classList.add('hidden');
   layout.style.display = 'none';
   dash.classList.add('hidden');
+  cmpPanel.classList.add('hidden');
 
   if (tab === 'ujian') {
     ujianPanel.classList.remove('hidden');
@@ -3082,7 +3312,6 @@ function switchAdminTab(tab) {
     layout.style.display = '';
     sidebar.style.display = '';
     main.style.display = '';
-    dash.classList.add('hidden');
     updateAdminSummary();
   } else if (tab === 'hasil') {
     layout.style.display = '';
@@ -3090,6 +3319,9 @@ function switchAdminTab(tab) {
     main.style.display = 'none';
     dash.classList.remove('hidden');
     renderDashboard();
+  } else if (tab === 'perbandingan') {
+    cmpPanel.classList.remove('hidden');
+    renderComparison();
   }
 }
 
@@ -3458,6 +3690,184 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 // TOAST
 // ══════════════════════════════════════════
 let toastTimer;
+// ══════════════════════════════════════════
+// PERBANDINGAN PRE TEST vs POST TEST
+// ══════════════════════════════════════════
+async function renderComparison() {
+  const examFilter = document.getElementById('cmp-filter-exam');
+  if (!examFilter) return;
+
+  // Populate exam dropdown
+  const allResults = db ? (await cloudLoadResults(null) || getResults()) : getResults();
+  const codes = [...new Set(allResults.map(r => r.examCode).filter(Boolean))];
+  const curVal = examFilter.value;
+  examFilter.innerHTML = '<option value="">— Pilih Ujian —</option>' +
+    codes.map(c => {
+      const exam = allExams.find(e => e.code === c);
+      const label = exam ? `${exam.name} (${c})` : c;
+      return `<option value="${c}" ${curVal === c ? 'selected' : ''}>${label}</option>`;
+    }).join('');
+
+  const selectedCode = examFilter.value;
+  const tbody  = document.getElementById('cmp-tbody');
+  const empty  = document.getElementById('cmp-empty');
+  const stats  = document.getElementById('cmp-stats');
+
+  if (!selectedCode) {
+    tbody.innerHTML = '';
+    empty.classList.remove('hidden');
+    stats.innerHTML = '';
+    return;
+  }
+
+  // Filter results for selected exam
+  const examResults = allResults.filter(r => r.examCode === selectedCode);
+  const preResults  = examResults.filter(r => r.examType === 'pretest');
+  const postResults = examResults.filter(r => r.examType === 'posttest');
+
+  // Build map by studentId
+  const preMap  = {};
+  const postMap = {};
+  preResults.forEach(r => { preMap[r.id.toLowerCase()]  = r; });
+  postResults.forEach(r => { postMap[r.id.toLowerCase()] = r; });
+
+  // All unique students across both
+  const allIds = [...new Set([...Object.keys(preMap), ...Object.keys(postMap)])];
+
+  if (allIds.length === 0) {
+    tbody.innerHTML = '';
+    empty.classList.remove('hidden');
+    stats.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Belum ada data Pre Test atau Post Test untuk ujian ini.</div>';
+    return;
+  }
+  empty.classList.add('hidden');
+
+  // Build rows
+  let completedBoth = 0, improvedCount = 0, declinedCount = 0, sameCount = 0;
+  let totalDelta = 0;
+
+  const rows = allIds.map(sid => {
+    const pre  = preMap[sid];
+    const post = postMap[sid];
+    const name = (pre || post).name || sid;
+
+    let deltaCell = '<span class="delta-same">—</span>';
+    let barCell   = '';
+    let deltaNum  = null;
+
+    if (pre && post) {
+      completedBoth++;
+      deltaNum = post.score - pre.score;
+      totalDelta += deltaNum;
+      if (deltaNum > 0)      { improvedCount++; deltaCell = `<span class="delta-up">↑ +${deltaNum}</span>`; }
+      else if (deltaNum < 0) { declinedCount++; deltaCell = `<span class="delta-down">↓ ${deltaNum}</span>`; }
+      else                   { sameCount++;     deltaCell = `<span class="delta-same">→ 0</span>`; }
+
+      const maxDelta = 100;
+      const pct = Math.min(Math.abs(deltaNum), maxDelta) / maxDelta * 100;
+      const color = deltaNum > 0 ? 'var(--green)' : deltaNum < 0 ? 'var(--red)' : 'var(--muted-2)';
+      barCell = `<div class="delta-bar-wrap"><div class="delta-bar-fill" style="width:${pct}%;background:${color}"></div></div>`;
+    }
+
+    const preScore  = pre  ? `<span class="score-chip ${pre.score>=80?'score-high':pre.score>=60?'score-mid':'score-low'}">${pre.score}</span>`
+                           : '<span style="color:var(--muted-2)">—</span>';
+    const postScore = post ? `<span class="score-chip ${post.score>=80?'score-high':post.score>=60?'score-mid':'score-low'}">${post.score}</span>`
+                           : '<span style="color:var(--muted-2)">—</span>';
+    const preViol   = pre  ? (pre.warnCount  > 0 ? `<span style="color:var(--red)">⚠ ${pre.warnCount}x</span>`  : '✅') : '—';
+    const postViol  = post ? (post.warnCount > 0 ? `<span style="color:var(--red)">⚠ ${post.warnCount}x</span>` : '✅') : '—';
+
+    return `<tr>
+      <td style="font-family:'JetBrains Mono',monospace;color:var(--blue)">${sid}</td>
+      <td style="font-weight:600">${name}</td>
+      <td>${preScore}</td>
+      <td>${postScore}</td>
+      <td>${deltaCell}</td>
+      <td>${barCell}</td>
+      <td>${preViol}</td>
+      <td>${postViol}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = rows.join('');
+
+  // Summary stats
+  const avgDelta = completedBoth > 0 ? (totalDelta / completedBoth).toFixed(1) : '—';
+  stats.innerHTML = `
+    <div class="dash-stat">
+      <div class="ds-val">${allIds.length}</div>
+      <div class="ds-lbl">Total Peserta</div>
+      <div class="ds-sub">${completedBoth} keduanya selesai</div>
+    </div>
+    <div class="dash-stat">
+      <div class="ds-val" style="color:var(--green)">${improvedCount}</div>
+      <div class="ds-lbl">↑ Meningkat</div>
+      <div class="ds-sub">Nilai Post Test lebih tinggi</div>
+    </div>
+    <div class="dash-stat">
+      <div class="ds-val" style="color:var(--red)">${declinedCount}</div>
+      <div class="ds-lbl">↓ Menurun</div>
+      <div class="ds-sub">Nilai Post Test lebih rendah</div>
+    </div>
+    <div class="dash-stat">
+      <div class="ds-val" style="color:${parseFloat(avgDelta) > 0 ? 'var(--green)' : parseFloat(avgDelta) < 0 ? 'var(--red)' : 'var(--muted)'}">${avgDelta > 0 ? '+' : ''}${avgDelta}</div>
+      <div class="ds-lbl">Rata-rata Selisih</div>
+      <div class="ds-sub">${sameCount} peserta nilai sama</div>
+    </div>
+  `;
+}
+
+function downloadExcelComparison() {
+  const examFilter = document.getElementById('cmp-filter-exam');
+  const selectedCode = examFilter?.value || '';
+  if (!selectedCode) { toast('Pilih ujian terlebih dahulu', 'error'); return; }
+
+  const allResults  = getResults();
+  const examResults = allResults.filter(r => r.examCode === selectedCode);
+  const preResults  = examResults.filter(r => r.examType === 'pretest');
+  const postResults = examResults.filter(r => r.examType === 'posttest');
+
+  const preMap = {}, postMap = {};
+  preResults.forEach(r  => { preMap[r.id.toLowerCase()]  = r; });
+  postResults.forEach(r => { postMap[r.id.toLowerCase()] = r; });
+
+  const allIds = [...new Set([...Object.keys(preMap), ...Object.keys(postMap)])];
+  if (!allIds.length) { toast('Tidak ada data untuk diunduh', 'error'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Perbandingan
+  const header = ['No. Peserta','Nama','Nilai Pre Test','Nilai Post Test','Selisih',
+                  'Status','Waktu Pre Test','Waktu Post Test','Pelanggaran Pre','Pelanggaran Post'];
+  const rows = allIds.map(sid => {
+    const pre  = preMap[sid];
+    const post = postMap[sid];
+    const delta = (pre && post) ? post.score - pre.score : null;
+    const status = delta === null ? 'Belum lengkap' : delta > 0 ? 'Meningkat' : delta < 0 ? 'Menurun' : 'Sama';
+    return [
+      sid, (pre || post).name,
+      pre?.score ?? '—', post?.score ?? '—',
+      delta !== null ? delta : '—', status,
+      pre?.submittedAt ?? '—', post?.submittedAt ?? '—',
+      pre?.warnCount ?? '—', post?.warnCount ?? '—'
+    ];
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws1['!cols'] = [14,22,14,14,10,12,22,22,16,16].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws1, 'Perbandingan');
+
+  // Sheet 2: Detail Pre Test
+  const detailHeader = ['No. Peserta','Nama','Tipe','Nilai','Benar','Salah','Kosong','Pelanggaran','Waktu'];
+  const preRows  = preResults.map(r  => [r.id, r.name, 'Pre Test',  r.score, r.correct, r.wrong, r.unanswered, r.warnCount, r.submittedAt]);
+  const postRows = postResults.map(r => [r.id, r.name, 'Post Test', r.score, r.correct, r.wrong, r.unanswered, r.warnCount, r.submittedAt]);
+  const ws2 = XLSX.utils.aoa_to_sheet([detailHeader, ...preRows, ...postRows]);
+  ws2['!cols'] = [14,22,12,8,8,8,8,12,22].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detail Semua');
+
+  const examName = allExams.find(e => e.code === selectedCode)?.name || selectedCode;
+  XLSX.writeFile(wb, `Perbandingan-${selectedCode}.xlsx`);
+  toast('File Excel perbandingan berhasil diunduh ✓', 'ok');
+}
+
 function toast(msg, type='') {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -3474,14 +3884,12 @@ function showFileProtocolHelp() {
 // INIT
 // ══════════════════════════════════════════
 (function init() {
-  // Detect file:// protocol and show warning
   if (location.protocol === 'file:') {
     document.getElementById('file-protocol-warning').classList.remove('hidden');
   }
 
   loadAllExams();
 
-  // Migrate legacy single-config to multi-exam
   const legacy = localStorage.getItem('secureexam_config');
   if (legacy && allExams.length === 0) {
     try {
@@ -3495,10 +3903,16 @@ function showFileProtocolHelp() {
     } catch(e) {}
   }
 
-  // Load Firebase config if previously saved
   loadSavedFirebaseConfig();
 
   document.getElementById('exam-duration').addEventListener('input', updateAdminSummary);
+
+  // Live eligibility check: whenever student-id or entry-code changes, re-check post test lock
+  ['student-id', 'entry-code'].forEach(id => {
+    document.getElementById(id)?.addEventListener('blur', checkPostTestEligibility);
+    document.getElementById(id)?.addEventListener('change', checkPostTestEligibility);
+  });
+
   renderQList();
   updateAdminSummary();
 })();
