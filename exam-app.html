@@ -2499,6 +2499,7 @@ async function startExam() {
   currentQ    = 0;
   _lastViolationTime = 0;
   _lastViolationMsg  = '';
+  _submitting        = false;
 
   qOrder = cfg.questions.map((_,i) => i);
   if (acSettings.shuffle) qOrder = qOrder.sort(() => Math.random() - 0.5);
@@ -2623,20 +2624,17 @@ function activateScreenshotShield() {
   const grid   = document.getElementById('watermark-grid');
   if (!shield || !grid) return;
 
-  // Build watermark grid with student name
   const label = (studentInfo.name || 'Peserta') + ' · ' + (studentInfo.id || '') + ' · UJIAN RESMI';
   grid.innerHTML = Array(18).fill(0).map(() =>
     `<div class="wm-cell">${label}</div>`
   ).join('');
   shield.classList.remove('hidden');
 
-  // CSS: prevent text selection across entire exam
   document.body.style.webkitUserSelect = 'none';
   document.body.style.userSelect = 'none';
-
-  // Mobile: blur content when screen is captured (visibility change)
-  // The brief focus loss when screenshot assistant activates triggers our handler
-  document.addEventListener('visibilitychange', onMobileScreenshotDetect);
+  // Note: mobile screenshot detection is handled by onVisibilityChange
+  // (which is already listening). We do NOT add a second visibilitychange
+  // listener here — that would cause every tab-switch to register twice.
 }
 
 function deactivateScreenshotShield() {
@@ -2644,27 +2642,10 @@ function deactivateScreenshotShield() {
   if (shield) shield.classList.add('hidden');
   document.body.style.webkitUserSelect = '';
   document.body.style.userSelect = '';
-  document.removeEventListener('visibilitychange', onMobileScreenshotDetect);
 }
 
-function onMobileScreenshotDetect() {
-  // On many Android devices, taking a screenshot briefly pauses the app
-  // This is already handled by onVisibilityChange, but we add a secondary
-  // check specifically logging it as a screenshot attempt when it's very brief
-  if (document.hidden) {
-    const t = Date.now();
-    const check = () => {
-      if (!document.hidden) {
-        const elapsed = Date.now() - t;
-        if (elapsed < 1500) {
-          // Very brief focus loss (< 1.5s) typical of screenshot action
-          triggerViolation('Kemungkinan screenshot terdeteksi (aktivitas layar singkat)');
-        }
-      }
-    };
-    setTimeout(check, 1600);
-  }
-}
+// onMobileScreenshotDetect removed — visibilitychange is already
+// handled by onVisibilityChange. Having two listeners caused double violations.
 
 // ══════════════════════════════════════════
 // ANTI-CHEAT
@@ -2781,16 +2762,18 @@ function stopDevToolsDetection() {
   clearInterval(devtoolsTimer);
 }
 
-// ── Violation cooldown — prevent same violation firing twice in 1.5s ──
+// ── Violation guard ───────────────────────
 let _lastViolationTime = 0;
 let _lastViolationMsg  = '';
+let _submitting        = false; // prevent double-submit
 
 function triggerViolation(msg) {
   if (!examActive) return;
+  if (_submitting) return;
 
-  // Debounce: ignore if same message fired within 1.5 seconds
+  // Global cooldown: ANY violation ignored within 2 seconds of the last one
   const now = Date.now();
-  if (msg === _lastViolationMsg && now - _lastViolationTime < 1500) return;
+  if (now - _lastViolationTime < 2000) return;
   _lastViolationTime = now;
   _lastViolationMsg  = msg;
 
@@ -2802,17 +2785,15 @@ function triggerViolation(msg) {
   document.getElementById('warn-display').textContent = warnCount;
 
   if (warnCount >= maxWarn) {
-    // Stop exam immediately — no button required from student
-    examActive = false; // prevent further violations
+    examActive = false; // stop further violations immediately
     document.getElementById('warning-overlay').innerHTML = `
       <div class="warn-icon">🚫</div>
       <h2>UJIAN DIHENTIKAN</h2>
-      <p>Anda telah melebihi batas peringatan (${maxWarn}x).<br>Ujian dihentikan secara otomatis. Hasil Anda sedang disimpan…</p>
-      <div style="margin-top:12px"><div class="spinner" style="margin:0 auto;border-color:rgba(255,255,255,0.3);border-top-color:#fff;width:28px;height:28px"></div></div>
+      <p>Anda telah melebihi batas peringatan (${maxWarn}x).<br>Ujian dihentikan. Hasil Anda sedang disimpan…</p>
+      <div style="margin-top:16px"><div class="spinner" style="margin:0 auto;border-color:rgba(255,255,255,0.3);border-top-color:#fff;width:28px;height:28px;border-width:3px"></div></div>
     `;
     document.getElementById('warning-overlay').classList.remove('hidden');
-    // Auto-submit after brief delay so student can read the message
-    setTimeout(() => submitExam(false, true), 1800);
+    setTimeout(() => submitExam(false, true), 2000);
   } else {
     document.getElementById('warn-count-display').textContent = warnCount;
     document.getElementById('warn-max').textContent = maxWarn;
@@ -2823,7 +2804,9 @@ function triggerViolation(msg) {
 
 function dismissWarning() {
   document.getElementById('warning-overlay').classList.add('hidden');
-  _lastViolationTime = 0; // allow next violation to register immediately
+  // Set cooldown to NOW so the act of dismissing doesn't immediately re-trigger
+  // from lingering events (blur, visibilitychange firing on modal close)
+  _lastViolationTime = Date.now();
   _lastViolationMsg  = '';
   if (acSettings.fullscreen && !document.fullscreenElement) {
     document.documentElement.requestFullscreen().catch(()=>{});
@@ -2845,18 +2828,23 @@ function confirmSubmit() {
 }
 
 async function submitExam(timeUp=false, forceStop=false) {
+  // Guard: prevent double submission (can be called by timer AND forced stop simultaneously)
+  if (_submitting) return;
+  _submitting = true;
+
   closeModal('modal-submit');
   examActive = false;
   clearInterval(timerInterval);
   removeAntiCheat();
-  _lastViolationMsg = ''; // reset debounce
+  _lastViolationTime = Date.now(); // freeze cooldown
+  _lastViolationMsg  = '';
 
-  // Hide warning overlay so result screen is visible
+  // Hide warning overlay FIRST so it never covers the result screen
   document.getElementById('warning-overlay').classList.add('hidden');
 
   if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
 
-  // Record one-time attempt — localStorage + cloud
+  // Record attempt
   recordAttempt(examConfig.code, studentInfo.id);
   cloudRecordAttempt(examConfig.code, studentInfo.id);
 
@@ -2891,7 +2879,7 @@ async function submitExam(timeUp=false, forceStop=false) {
   const mcTotal = examConfig.questions.filter(q=>q.type!=='essay').reduce((s,q)=>s+q.points,0);
   const score = mcTotal > 0 ? Math.round(earned / mcTotal * 100) : 0;
 
-  // Save result to localStorage (offline backup)
+  // Save result
   const resultData = {
     name: studentInfo.name,
     id: studentInfo.id,
@@ -2908,23 +2896,36 @@ async function submitExam(timeUp=false, forceStop=false) {
     localStorage.setItem('secureexam_results', JSON.stringify(stored));
   } catch(e) {}
 
-  // Save to cloud (primary)
-  const cloudOk = await cloudSaveResult(resultData);
-  if (cloudOk) {
-    document.getElementById('r-cloud-status').innerHTML =
-      '<span style="color:var(--green)">☁️ Hasil berhasil dikirim ke cloud ✓</span>';
-  } else if (db) {
-    document.getElementById('r-cloud-status').innerHTML =
-      '<span style="color:var(--red)">⚠️ Gagal kirim ke cloud — tersimpan lokal saja</span>';
-  } else {
-    document.getElementById('r-cloud-status').innerHTML =
-      '<span style="color:var(--muted)">📱 Tersimpan lokal (cloud tidak dikonfigurasi)</span>';
-  }
+  // Cloud save with 8-second timeout so we don't block the result screen
+  let cloudOk = false;
+  try {
+    const cloudPromise = cloudSaveResult(resultData);
+    const timeout = new Promise(res => setTimeout(() => res('timeout'), 8000));
+    const result = await Promise.race([cloudPromise, timeout]);
+    cloudOk = (result === true);
+  } catch(e) { cloudOk = false; }
 
-  // Render result — tampilkan nilai saja kepada peserta
-  document.getElementById('result-name').textContent = `${studentInfo.name} — ${studentInfo.id}`;
-  document.getElementById('result-score').textContent = score;
+  try {
+    const statusEl = document.getElementById('r-cloud-status');
+    if (statusEl) {
+      if (cloudOk) {
+        statusEl.innerHTML = '<span style="color:var(--green)">☁️ Hasil berhasil dikirim ke cloud ✓</span>';
+      } else if (db) {
+        statusEl.innerHTML = '<span style="color:var(--red)">⚠️ Gagal kirim ke cloud — tersimpan lokal</span>';
+      } else {
+        statusEl.innerHTML = '<span style="color:var(--muted)">📱 Tersimpan lokal</span>';
+      }
+    }
+  } catch(e) {}
 
+  // Set result values
+  try {
+    document.getElementById('result-name').textContent = `${studentInfo.name} — ${studentInfo.id}`;
+    document.getElementById('result-score').textContent = score;
+  } catch(e) {}
+
+  // Show result — ALWAYS runs because it's outside any try/catch
+  _submitting = false;
   showScreen('result');
 }
 
