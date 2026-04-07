@@ -2657,7 +2657,39 @@ function deactivateScreenshotShield() {
 // ══════════════════════════════════════════
 // ANTI-CHEAT
 // ══════════════════════════════════════════
+
+let initialH = window.innerHeight;
+  
 function initAntiCheat() {
+  
+  if (!examActive) return;
+
+  // 1. Deteksi Pindah Tab / Buka Aplikasi Lain (Gemini, dll)
+  window.onblur = () => {
+    if (examActive) triggerViolation("Pindah Aplikasi/Tab Terdeteksi");
+  };
+
+  document.onvisibilitychange = () => {
+    if (document.visibilityState === 'hidden' && examActive) {
+      triggerViolation("Aplikasi Ditinggalkan");
+    }
+  };
+
+  // 2. Deteksi Split Screen (Perubahan Ukuran Layar Drastis)
+  window.onresize = () => {
+    if (!examActive) return;
+    let currentH = window.innerHeight;
+    // Jika tinggi layar berkurang lebih dari 15%, asumsikan split screen atau keyboard aktif
+    // Namun untuk split screen biasanya perubahannya permanen & drastis
+    if (Math.abs(initialH - currentH) > (initialH * 0.15)) {
+      triggerViolation("Perubahan Ukuran Layar (Indikasi Split Screen)");
+    }
+  };
+
+  // 3. Matikan Klik Kanan, Copy, & Select (Mencegah Copas ke AI)
+  document.oncontextmenu = (e) => e.preventDefault();
+  document.oncopy = (e) => e.preventDefault();
+  
   // Tab / visibility detection
   if (acSettings.tabdetect) {
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -2774,6 +2806,27 @@ let _lastViolationTime = 0;
 let _lastViolationMsg  = '';
 let _submitting        = false; // prevent double-submit
 
+function triggerViolation(reason) {
+  const time = new Date().toLocaleTimeString('id-ID');
+  
+  // Catat pelanggaran ke data lokal
+  currentViolations.push({ time, type: reason });
+
+  // Tampilkan penutup layar agar peserta tidak bisa lanjut curang
+  const shield = document.getElementById('violation-shield');
+  if (shield) {
+    shield.style.display = 'flex';
+    shield.querySelector('.shield-msg').textContent = reason;
+  }
+
+  // Sinkronisasi ke Firebase secara Real-time
+  if (db && currentDocId) {
+    db.collection('results').doc(currentDocId).update({
+      violations: currentViolations
+    }).catch(err => console.error("Sync Error:", err));
+  }
+}
+  
 function triggerViolation(msg) {
   if (!examActive) return;
   if (_submitting) return;
@@ -3466,5 +3519,18 @@ function showFileProtocolHelp() {
   updateAdminSummary();
 })();
 </script>
+
+<div id="violation-shield">
+  <div class="shield-box">
+    <div class="shield-icon">⚠️</div>
+    <h3>Pelanggaran Terdeteksi</h3>
+    <p class="shield-msg" style="margin: 15px 0; opacity: 0.8;"></p>
+    <button class="btn btn-blue" onclick="document.getElementById('violation-shield').style.display='none'" style="width: 100%;">
+      Saya Mengerti, Lanjutkan Ujian
+    </button>
+  </div>
+</div>
+
+  
 </body>
 </html>
