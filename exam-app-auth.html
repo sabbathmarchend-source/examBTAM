@@ -1283,30 +1283,31 @@ service cloud.firestore {
 
     // Soal ujian (tanpa kunci jawaban) — peserta boleh baca
     match /se_exams/{doc} {
-      allow read: if true;
-      allow write: if request.auth != null; // hanya admin yg login
+      allow read:  if true;
+      allow write: if request.auth != null;
     }
 
-    // Kunci jawaban — hanya admin (login) yang boleh baca
+    // Kunci jawaban — hanya admin (login) yang boleh baca & tulis
     match /se_answers/{doc} {
       allow read:  if request.auth != null;
       allow write: if request.auth != null;
     }
 
-    // Jawaban peserta — boleh kirim, tidak boleh baca/edit
+    // Jawaban peserta — peserta boleh create, admin boleh baca
     match /se_submissions/{doc} {
       allow create: if true;
-      allow read:   if request.auth != null; // hanya admin
-      allow update, delete: if false;
+      allow read:   if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if false;
     }
 
-    // Hasil ujian — admin yang hitung & simpan, semua boleh baca
+    // Hasil ujian — admin tulis, semua boleh baca
     match /se_results/{doc} {
       allow read:   if true;
-      allow write:  if request.auth != null; // admin yang proses
+      allow write:  if request.auth != null;
     }
 
-    // Percobaan ujian
+    // Percobaan ujian — semua perangkat
     match /se_attempts/{doc} {
       allow read, write: if true;
     }
@@ -1610,6 +1611,8 @@ async function loadSavedFirebaseConfig() {
         if (ok) {
           localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(config));
           updateCloudBadge('connected');
+          // Juga coba restore sesi admin jika dibuka di perangkat admin
+          await tryRestoreAdminSession();
           return;
         }
       }
@@ -1624,7 +1627,6 @@ async function loadSavedFirebaseConfig() {
     const ok = await initFirebase(config);
     if (ok) {
       updateCloudBadge('connected');
-      // Coba login kembali sebagai admin jika credentials tersimpan
       await tryRestoreAdminSession();
     }
   } catch(e) {}
@@ -1636,10 +1638,12 @@ let _firebaseAuthReady = false; // true setelah onAuthStateChanged pertama kali 
 async function adminSignIn(email, password) {
   if (!auth) return false;
   try {
+    // Persistence LOCAL agar token bertahan setelah halaman di-refresh / tab ditutup
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     await auth.signInWithEmailAndPassword(email, password);
     return true;
   } catch(e) {
-    console.warn('Admin sign in failed:', e.code);
+    console.warn('Admin sign in failed:', e.code, e.message);
     return false;
   }
 }
@@ -3608,8 +3612,18 @@ async function prosesNilai() {
 
   try {
     // Ambil semua submission yang belum diproses
-    const snap = await db.collection('se_submissions')
-      .where('status', '==', 'pending').get();
+    let snap;
+    try {
+      snap = await db.collection('se_submissions')
+        .where('status', '==', 'pending').get();
+    } catch(e) {
+      const hint = e.code === 'permission-denied'
+        ? '\n\nPastikan Security Rules sudah diperbarui dan Anda sudah login sebagai admin (lihat status di header).'
+        : '';
+      toast('Gagal baca jawaban: ' + e.message + hint, 'error');
+      btn.disabled = false; btn.textContent = '⚡ Proses Nilai Pending';
+      return;
+    }
 
     if (snap.empty) {
       toast('Tidak ada jawaban pending untuk diproses.', 'ok');
@@ -3618,13 +3632,29 @@ async function prosesNilai() {
     }
 
     let processed = 0;
+    let errors = 0;
     for (const doc of snap.docs) {
       const sub = doc.data();
-      // Ambil kunci jawaban — hanya bisa diakses jika admin sudah login
-      const answerDoc = await db.collection('se_answers').doc(sub.examId).get();
-      if (!answerDoc.exists) continue;
-      const { answers: answerKey } = answerDoc.data();
 
+      // Ambil kunci jawaban — hanya bisa diakses jika admin sudah login
+      let answerDoc;
+      try {
+        answerDoc = await db.collection('se_answers').doc(sub.examId).get();
+      } catch(e) {
+        if (e.code === 'permission-denied') {
+          toast('Akses ke kunci jawaban ditolak. Pastikan Anda login sebagai admin Firebase (status di header harus menampilkan email Anda).', 'error');
+          btn.disabled = false; btn.textContent = '⚡ Proses Nilai Pending';
+          return;
+        }
+        errors++; continue;
+      }
+
+      if (!answerDoc.exists) {
+        // Kunci jawaban belum ada — admin perlu simpan ulang ujian
+        errors++; continue;
+      }
+
+      const { answers: answerKey } = answerDoc.data();
       let earned = 0, correct = 0, wrong = 0, unanswered = 0;
       const details = [];
       const mcTotal = answerKey.filter(k => k.type !== 'essay').reduce((s,k)=>s+(k.points||10),0);
@@ -3663,22 +3693,43 @@ async function prosesNilai() {
         scoredAt: firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      // Simpan hasil
-      await db.collection('se_results').add(result);
-      // Tandai submission sebagai selesai
-      await doc.ref.update({ status: 'scored', score });
-      // Simpan lokal
+      // Simpan hasil ke se_results
+      try {
+        await db.collection('se_results').add(result);
+      } catch(e) {
+        if (e.code === 'permission-denied') {
+          toast('Gagal simpan hasil: akses ditolak ke se_results. Periksa Security Rules.', 'error');
+          btn.disabled = false; btn.textContent = '⚡ Proses Nilai Pending';
+          return;
+        }
+        errors++; continue;
+      }
+
+      // TIDAK melakukan update ke se_submissions untuk menghindari permission error.
+      // Dokumen submission tetap ada sebagai audit trail.
+
+      // Simpan lokal untuk dashboard
       try {
         const stored = JSON.parse(localStorage.getItem('secureexam_results')||'[]');
-        stored.push(result); localStorage.setItem('secureexam_results', JSON.stringify(stored));
+        // Hindari duplikat
+        if (!stored.find(r => r.submissionId === doc.id)) {
+          stored.push(result);
+          localStorage.setItem('secureexam_results', JSON.stringify(stored));
+        }
       } catch(_) {}
       processed++;
     }
 
-    toast(`${processed} jawaban berhasil dinilai ✓`, 'ok');
+    if (processed > 0) {
+      toast(`${processed} jawaban berhasil dinilai ✓${errors > 0 ? ` (${errors} gagal)` : ''}`, 'ok');
+    } else if (errors > 0) {
+      toast(`Semua jawaban gagal diproses. Kemungkinan kunci jawaban belum ada — simpan ulang ujian di tab Editor Soal.`, 'error');
+    } else {
+      toast('Tidak ada yang diproses.', 'error');
+    }
     renderDashboard();
   } catch(e) {
-    toast('Gagal memproses: ' + e.message, 'error');
+    toast('Error tidak terduga: ' + e.message, 'error');
   }
   btn.disabled = false; btn.textContent = '⚡ Proses Nilai Pending';
 }
@@ -3696,16 +3747,34 @@ async function renderDashboard() {
   const prosesBtn = document.getElementById('btn-proses-nilai');
   if (prosesBtn && db && isAdminSignedIn()) {
     prosesBtn.style.display = '';
-    db.collection('se_submissions').where('status','==','pending').get()
-      .then(snap => {
-        if (snap.size > 0) {
-          prosesBtn.textContent = `⚡ Proses Nilai (${snap.size} pending)`;
+    // Hitung semua submissions — se_results yang sudah ada dikurangi
+    db.collection('se_submissions').get()
+      .then(async subSnap => {
+        if (subSnap.empty) {
+          prosesBtn.textContent = '✓ Belum ada jawaban';
+          prosesBtn.style.background = 'var(--muted-2)';
+          return;
+        }
+        // Hitung yang sudah punya hasil di se_results
+        const scored = new Set();
+        try {
+          const resSnap = await db.collection('se_results').get();
+          resSnap.docs.forEach(d => {
+            const sid = d.data().submissionId;
+            if (sid) scored.add(sid);
+          });
+        } catch(_) {}
+        const pending = subSnap.docs.filter(d => !scored.has(d.id)).length;
+        if (pending > 0) {
+          prosesBtn.textContent = `⚡ Proses Nilai (${pending} pending)`;
           prosesBtn.style.background = 'var(--amber)';
+          prosesBtn.style.color = '#fff';
         } else {
           prosesBtn.textContent = '✓ Semua Sudah Dinilai';
           prosesBtn.style.background = 'var(--green)';
+          prosesBtn.style.color = '#fff';
         }
-      }).catch(()=>{ prosesBtn.style.display = 'none'; });
+      }).catch(() => { prosesBtn.style.display = 'none'; });
   } else if (prosesBtn) {
     prosesBtn.style.display = 'none';
   }
