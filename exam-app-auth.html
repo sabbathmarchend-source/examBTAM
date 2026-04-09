@@ -1965,10 +1965,19 @@ async function cloudSaveResult(resultData) {
 async function cloudLoadResults(examCode) {
   if (!db) return null;
   try {
-    let q = db.collection('se_results').orderBy('_savedAt', 'desc');
+    // Tidak pakai orderBy agar tidak perlu composite index di Firestore.
+    // Pengurutan dilakukan di client setelah data diterima.
+    let q = db.collection('se_results');
     if (examCode) q = q.where('examCode', '==', examCode);
     const snap = await q.get();
-    return snap.docs.map(d => ({ _cloudId: d.id, ...d.data() }));
+    const results = snap.docs.map(d => ({ _cloudId: d.id, ...d.data() }));
+    // Urutkan di client berdasarkan submittedAt (terbaru dulu)
+    results.sort((a, b) => {
+      const ta = a.scoredAt?.seconds || 0;
+      const tb = b.scoredAt?.seconds || 0;
+      return tb - ta;
+    });
+    return results;
   } catch(e) {
     console.warn('Cloud load results failed:', e);
     return null;
@@ -3778,6 +3787,9 @@ async function renderDashboard() {
   } else if (prosesBtn) {
     prosesBtn.style.display = 'none';
   }
+
+  // Show loading state
+  document.getElementById('dash-stats').innerHTML =
     '<div class="dash-stat" style="grid-column:1/-1;text-align:center;color:var(--muted)"><div class="spinner" style="margin:0 auto"></div></div>';
 
   // Try cloud first, fall back to localStorage
@@ -4066,13 +4078,33 @@ function renderKompChart(results) {
 async function deleteResult(idx) {
   if (!confirm('Hapus data hasil ujian peserta ini?')) return;
   const r = dashResults[idx];
-  // Delete from cloud if available
+
+  // Hapus se_results dari cloud
   if (r?._cloudId) await cloudDeleteResult(r._cloudId);
-  // Delete from localStorage
+
+  // Hapus se_submissions yang terkait agar tidak muncul sebagai pending lagi
+  if (db && r?.submissionId) {
+    try {
+      await db.collection('se_submissions').doc(r.submissionId).delete();
+    } catch(e) {}
+  } else if (db && r?.id && r?.examCode) {
+    // Fallback: cari berdasarkan id + examCode jika submissionId tidak tersimpan
+    try {
+      const snap = await db.collection('se_submissions')
+        .where('id', '==', r.id)
+        .where('examCode', '==', r.examCode).get();
+      const batch = db.batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    } catch(e) {}
+  }
+
+  // Hapus dari localStorage
   try {
     const local = getResults().filter(x => !(x.id===r.id && x.examCode===r.examCode && x.submittedAt===r.submittedAt));
     localStorage.setItem('secureexam_results', JSON.stringify(local));
   } catch(e) {}
+
   closeDashDetail();
   renderDashboard();
   toast('Data peserta dihapus', 'ok');
@@ -4095,25 +4127,47 @@ async function clearResultsAdmin() {
     ? `Hapus semua hasil ujian untuk kode "${selectedCode}" dari ${src}?`
     : `Hapus SEMUA data hasil ujian dari ${src}?`;
   if (!confirm(msg + ' Tindakan ini tidak bisa dibatalkan.')) return;
+
   // Clear localStorage
   if (selectedCode) {
     localStorage.setItem('secureexam_results', JSON.stringify(getResults().filter(r => r.examCode !== selectedCode)));
   } else {
     localStorage.removeItem('secureexam_results');
   }
-  // Clear cloud
+
+  // Clear cloud — hapus se_results DAN se_submissions agar tidak muncul sebagai pending lagi
   if (db) {
     try {
       if (selectedCode) {
+        // Hapus se_results untuk ujian ini
         await cloudDeleteResultsByExam(selectedCode);
+        // Hapus se_submissions untuk ujian ini juga
+        const subSnap = await db.collection('se_submissions')
+          .where('examCode', '==', selectedCode).get();
+        if (!subSnap.empty) {
+          const batch = db.batch();
+          subSnap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
       } else {
-        const snap = await db.collection('se_results').get();
-        const batch = db.batch();
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
+        // Hapus semua se_results
+        const resSnap = await db.collection('se_results').get();
+        if (!resSnap.empty) {
+          const batch = db.batch();
+          resSnap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+        // Hapus semua se_submissions
+        const subSnap = await db.collection('se_submissions').get();
+        if (!subSnap.empty) {
+          const batch = db.batch();
+          subSnap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
       }
     } catch(e) { toast('Hapus cloud gagal sebagian: ' + e.message, 'error'); }
   }
+
   dashResults = [];
   closeDashDetail();
   renderDashboard();
