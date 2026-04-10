@@ -1606,11 +1606,15 @@ async function cloudSaveExam(exam) {
 async function cloudUpdateExamAccess(examId, pretestOpen, posttestOpen) {
   if (!db) return;
   try {
-    await db.collection('se_exams').doc(examId).update({
+    // Gunakan set+merge agar tidak gagal meski doc belum ada atau auth belum siap
+    await db.collection('se_exams').doc(examId).set({
       pretestOpen, posttestOpen,
       _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } catch(e) { console.warn('Cloud update access failed:', e); }
+    }, { merge: true });
+  } catch(e) {
+    // Gagal cloud tidak masalah — localStorage adalah sumber kebenaran untuk toggle
+    console.warn('Cloud update access failed (localStorage tetap valid):', e.message);
+  }
 }
 
 async function cloudDeleteExam(examId) {
@@ -2357,10 +2361,25 @@ async function goAdmin() {
       if (cloudExams) {
         cloudExams.forEach(ce => {
           if (!allExams.find(e => e.id === ce.id)) {
-            allExams.push(ce);
+            // Exam baru dari cloud — pastikan ada field toggle (default false jika belum ada)
+            allExams.push({
+              pretestOpen:  false,
+              posttestOpen: false,
+              ...ce
+            });
           } else {
             const idx = allExams.findIndex(e => e.id === ce.id);
-            if (idx >= 0) allExams[idx] = ce;
+            if (idx >= 0) {
+              // PENTING: pertahankan nilai toggle lokal — hanya admin yang bisa mengubahnya
+              // Jangan biarkan cloud sync menimpa pretestOpen/posttestOpen
+              const localPre  = allExams[idx].pretestOpen;
+              const localPost = allExams[idx].posttestOpen;
+              allExams[idx] = {
+                ...ce,
+                pretestOpen:  localPre  !== undefined ? localPre  : (ce.pretestOpen  ?? false),
+                posttestOpen: localPost !== undefined ? localPost : (ce.posttestOpen ?? false)
+              };
+            }
           }
         });
         saveAllExams();
@@ -3101,9 +3120,18 @@ async function startExam() {
     startBtn.disabled = false;
     startBtn.textContent = origText;
     if (cfg) {
-      if (!allExams.find(e => e.id === cfg.id)) {
-        allExams.push(cfg);
+      const localExam = allExams.find(e => e.id === cfg.id);
+      if (!localExam) {
+        // Exam baru — pakai nilai cloud (default false jika tidak ada)
+        allExams.push({ pretestOpen: false, posttestOpen: false, ...cfg });
         saveAllExams();
+      } else {
+        // Exam sudah ada lokal — pertahankan toggle lokal
+        cfg = {
+          ...cfg,
+          pretestOpen:  localExam.pretestOpen  !== undefined ? localExam.pretestOpen  : (cfg.pretestOpen  ?? false),
+          posttestOpen: localExam.posttestOpen !== undefined ? localExam.posttestOpen : (cfg.posttestOpen ?? false)
+        };
       }
     }
   }
