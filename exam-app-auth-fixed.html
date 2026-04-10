@@ -1424,7 +1424,8 @@ service cloud.firestore {
 // ══════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════
-let allExams    = [];    // All saved exams [{id,name,code,duration,maxWarnings,ac,questions}]
+let allExams    = [];    // All saved exams [{id,name,code,duration,maxWarnings,ac,questions,elemenKompetensi}]
+let elemenKompetensiList = []; // EK list for currently active exam
 let activeExamId = null; // ID of exam currently being edited
 let questions   = [];    // Questions for exam being edited
 let examConfig  = {};    // Active exam config during student exam
@@ -2366,6 +2367,8 @@ function newExam() {
   document.getElementById('ac-screenshot').checked = true;
   document.getElementById('ac-shuffle').checked = false;
   document.getElementById('q-editor-area').innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📝</div><p>Klik "+ Tambah Soal" untuk mulai membuat soal ujian.</p></div>`;
+  elemenKompetensiList = [];
+  renderElemenKompetensiList();
   renderQList();
   updateAdminSummary();
   switchAdminTab('soal');
@@ -2391,6 +2394,8 @@ function openExamEditor(id) {
   document.getElementById('ac-screenshot').checked = ac.screenshot !== false;
   document.getElementById('ac-shuffle').checked    = !!ac.shuffle;
   document.getElementById('q-editor-area').innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📝</div><p>Pilih soal dari daftar atau tambah soal baru.</p></div>`;
+  elemenKompetensiList = Array.isArray(exam.elemenKompetensi) ? [...exam.elemenKompetensi] : [];
+  renderElemenKompetensiList();
   renderQList();
   updateAdminSummary();
   switchAdminTab('soal');
@@ -2588,7 +2593,15 @@ function editQuestion(i) {
       <div style="display:grid;grid-template-columns:1fr 100px;gap:12px">
         <div class="form-group" style="margin:0">
           <label>Elemen Kompetensi <span style="color:var(--gold)">🏷</span></label>
-          <input type="text" id="eq-kompetensi" value="${q.kompetensi||''}" placeholder="cth: C2 – Memahami, C4 – Menganalisis, KD 3.2...">
+          ${elemenKompetensiList.length > 0
+            ? `<select id="eq-kompetensi" style="font-size:0.85rem">
+                <option value="">— Tidak ada —</option>
+                ${elemenKompetensiList.map(ek =>
+                  `<option value="${ek}" ${q.kompetensi===ek?'selected':''}>${ek}</option>`
+                ).join('')}
+               </select>`
+            : `<input type="text" id="eq-kompetensi" value="${q.kompetensi||''}" placeholder="Tambahkan EK di sidebar terlebih dahulu…">`
+          }
         </div>
         <div class="form-group" style="margin:0">
           <label>Poin</label>
@@ -2629,6 +2642,39 @@ function saveQEdit(i) {
   updateAdminSummary();
   renderQList();
   toast('Soal disimpan ✓', 'ok');
+}
+
+// ── Elemen Kompetensi Management ────────────────────────────────────
+function renderElemenKompetensiList() {
+  const wrap = document.getElementById('ek-list');
+  if (!wrap) return;
+  if (elemenKompetensiList.length === 0) {
+    wrap.innerHTML = '<div style="color:var(--muted-2);font-size:0.76rem;font-style:italic">Belum ada elemen kompetensi.</div>';
+    return;
+  }
+  wrap.innerHTML = elemenKompetensiList.map((ek, i) => `
+    <div class="ek-item">
+      <span class="ek-item-text" title="${ek}">${ek}</span>
+      <button class="ek-del" onclick="removeElemenKompetensi(${i})" title="Hapus">✕</button>
+    </div>
+  `).join('');
+}
+
+function addElemenKompetensi() {
+  const inp = document.getElementById('ek-input');
+  const val = inp?.value.trim();
+  if (!val) { toast('Isi nama elemen kompetensi!', 'error'); return; }
+  if (elemenKompetensiList.includes(val)) { toast('Elemen kompetensi sudah ada.', 'error'); return; }
+  elemenKompetensiList.push(val);
+  if (inp) inp.value = '';
+  renderElemenKompetensiList();
+  toast('Elemen kompetensi ditambahkan ✓', 'ok');
+}
+
+function removeElemenKompetensi(i) {
+  elemenKompetensiList.splice(i, 1);
+  renderElemenKompetensiList();
+  toast('Elemen kompetensi dihapus');
 }
 
 function toggleType(i, isEssay) {
@@ -2681,7 +2727,8 @@ async function saveCurrentExam() {
       screenshot: document.getElementById('ac-screenshot').checked,
       shuffle:    document.getElementById('ac-shuffle').checked,
     },
-    questions: JSON.parse(JSON.stringify(questions))
+    questions: JSON.parse(JSON.stringify(questions)),
+    elemenKompetensi: [...elemenKompetensiList]
   };
   if (!activeExamId) {
     activeExamId = exam.id;
@@ -4230,6 +4277,15 @@ let toastTimer;
 // ══════════════════════════════════════════
 // PERBANDINGAN PRE TEST vs POST TEST
 // ══════════════════════════════════════════
+function getKategoriPerubahan(delta) {
+  if (delta === null) return { label: '—', cls: '', icon: '' };
+  if (delta >= 40)  return { label: 'Peningkatan Sangat Signifikan', cls: 'kat-sangat-signifikan', icon: '↑↑' };
+  if (delta >= 20)  return { label: 'Peningkatan Signifikan',        cls: 'kat-signifikan',        icon: '↑'  };
+  if (delta > 0)    return { label: 'Peningkatan Cukup Signifikan',  cls: 'kat-cukup-signifikan',  icon: '↗'  };
+  if (delta === 0)  return { label: 'Tidak Ada Peningkatan',         cls: 'kat-tidak-ada',         icon: '→'  };
+  return              { label: 'Penurunan',                          cls: 'kat-penurunan',          icon: '↓'  };
+}
+
 async function renderComparison() {
   const examFilter = document.getElementById('cmp-filter-exam');
   if (!examFilter) return;
@@ -4280,46 +4336,47 @@ async function renderComparison() {
   empty.classList.add('hidden');
 
   // Build rows
-  let completedBoth = 0, improvedCount = 0, declinedCount = 0, sameCount = 0;
-  let totalDelta = 0;
+  let completedBoth = 0, totalDelta = 0;
+  let katCount = { ss: 0, s: 0, cs: 0, ta: 0, p: 0 };
 
   const rows = allIds.map(sid => {
     const pre  = preMap[sid];
     const post = postMap[sid];
     const name = (pre || post).name || sid;
 
-    let deltaCell = '<span class="delta-same">—</span>';
-    let barCell   = '';
-    let deltaNum  = null;
+    let katCell  = '<span style="color:var(--muted-2)">—</span>';
+    let deltaNum = null;
 
     if (pre && post) {
       completedBoth++;
       deltaNum = post.score - pre.score;
       totalDelta += deltaNum;
-      if (deltaNum > 0)      { improvedCount++; deltaCell = `<span class="delta-up">↑ +${deltaNum}</span>`; }
-      else if (deltaNum < 0) { declinedCount++; deltaCell = `<span class="delta-down">↓ ${deltaNum}</span>`; }
-      else                   { sameCount++;     deltaCell = `<span class="delta-same">→ 0</span>`; }
-
-      const maxDelta = 100;
-      const pct = Math.min(Math.abs(deltaNum), maxDelta) / maxDelta * 100;
-      const color = deltaNum > 0 ? 'var(--green)' : deltaNum < 0 ? 'var(--red)' : 'var(--muted-2)';
-      barCell = `<div class="delta-bar-wrap"><div class="delta-bar-fill" style="width:${pct}%;background:${color}"></div></div>`;
+      const kat = getKategoriPerubahan(deltaNum);
+      katCell = `<span class="kat-badge ${kat.cls}">${kat.icon} ${kat.label}</span>`;
+      if (deltaNum >= 40)      katCount.ss++;
+      else if (deltaNum >= 20) katCount.s++;
+      else if (deltaNum > 0)   katCount.cs++;
+      else if (deltaNum === 0) katCount.ta++;
+      else                     katCount.p++;
     }
 
     const preScore  = pre  ? `<span class="score-chip ${pre.score>=80?'score-high':pre.score>=60?'score-mid':'score-low'}">${pre.score}</span>`
                            : '<span style="color:var(--muted-2)">—</span>';
     const postScore = post ? `<span class="score-chip ${post.score>=80?'score-high':post.score>=60?'score-mid':'score-low'}">${post.score}</span>`
                            : '<span style="color:var(--muted-2)">—</span>';
-    const preViol   = pre  ? (pre.warnCount  > 0 ? `<span style="color:var(--red)">⚠ ${pre.warnCount}x</span>`  : '✅') : '—';
-    const postViol  = post ? (post.warnCount > 0 ? `<span style="color:var(--red)">⚠ ${post.warnCount}x</span>` : '✅') : '—';
+    const deltaDisp = deltaNum !== null
+      ? `<span style="font-weight:700;color:${deltaNum>0?'var(--green)':deltaNum<0?'var(--red)':'var(--muted)'}">${deltaNum>0?'+':''}${deltaNum}</span>`
+      : '<span style="color:var(--muted-2)">—</span>';
+    const preViol  = pre  ? (pre.warnCount  > 0 ? `<span style="color:var(--red)">⚠ ${pre.warnCount}x</span>`  : '✅') : '—';
+    const postViol = post ? (post.warnCount > 0 ? `<span style="color:var(--red)">⚠ ${post.warnCount}x</span>` : '✅') : '—';
 
     return `<tr>
       <td style="font-family:'JetBrains Mono',monospace;color:var(--blue)">${sid}</td>
       <td style="font-weight:600">${name}</td>
       <td>${preScore}</td>
       <td>${postScore}</td>
-      <td>${deltaCell}</td>
-      <td>${barCell}</td>
+      <td>${deltaDisp}</td>
+      <td>${katCell}</td>
       <td>${preViol}</td>
       <td>${postViol}</td>
     </tr>`;
@@ -4329,6 +4386,7 @@ async function renderComparison() {
 
   // Summary stats
   const avgDelta = completedBoth > 0 ? (totalDelta / completedBoth).toFixed(1) : '—';
+  const avgNum = parseFloat(avgDelta);
   stats.innerHTML = `
     <div class="dash-stat">
       <div class="ds-val">${allIds.length}</div>
@@ -4336,19 +4394,18 @@ async function renderComparison() {
       <div class="ds-sub">${completedBoth} keduanya selesai</div>
     </div>
     <div class="dash-stat">
-      <div class="ds-val" style="color:var(--green)">${improvedCount}</div>
-      <div class="ds-lbl">↑ Meningkat</div>
-      <div class="ds-sub">Nilai Post Test lebih tinggi</div>
-    </div>
-    <div class="dash-stat">
-      <div class="ds-val" style="color:var(--red)">${declinedCount}</div>
-      <div class="ds-lbl">↓ Menurun</div>
-      <div class="ds-sub">Nilai Post Test lebih rendah</div>
-    </div>
-    <div class="dash-stat">
-      <div class="ds-val" style="color:${parseFloat(avgDelta) > 0 ? 'var(--green)' : parseFloat(avgDelta) < 0 ? 'var(--red)' : 'var(--muted)'}">${avgDelta > 0 ? '+' : ''}${avgDelta}</div>
+      <div class="ds-val" style="color:${avgNum>0?'var(--green)':avgNum<0?'var(--red)':'var(--muted)'}">${avgNum>0?'+':''}${avgDelta}</div>
       <div class="ds-lbl">Rata-rata Selisih</div>
-      <div class="ds-sub">${sameCount} peserta nilai sama</div>
+      <div class="ds-sub">dari ${completedBoth} peserta</div>
+    </div>
+    <div class="dash-stat" style="grid-column:1/-1">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="kat-badge kat-sangat-signifikan">↑↑ Sangat Signifikan: ${katCount.ss}</span>
+        <span class="kat-badge kat-signifikan">↑ Signifikan: ${katCount.s}</span>
+        <span class="kat-badge kat-cukup-signifikan">↗ Cukup Signifikan: ${katCount.cs}</span>
+        <span class="kat-badge kat-tidak-ada">→ Tidak Ada Peningkatan: ${katCount.ta}</span>
+        <span class="kat-badge kat-penurunan">↓ Penurunan: ${katCount.p}</span>
+      </div>
     </div>
   `;
 }
@@ -4379,7 +4436,8 @@ function downloadExcelComparison() {
     const pre  = preMap[sid];
     const post = postMap[sid];
     const delta = (pre && post) ? post.score - pre.score : null;
-    const status = delta === null ? 'Belum lengkap' : delta > 0 ? 'Meningkat' : delta < 0 ? 'Menurun' : 'Sama';
+    const kat = getKategoriPerubahan(delta);
+    const status = delta === null ? 'Belum lengkap' : kat.label;
     return [
       sid, (pre || post).name,
       pre?.score ?? '—', post?.score ?? '—',
