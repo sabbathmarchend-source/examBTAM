@@ -503,6 +503,30 @@
   .cloud-step-body code { font-family:'JetBrains Mono',monospace; font-size:0.76rem; background:var(--blue-lt); padding:1px 5px; border-radius:3px; color:var(--blue); }
 
 
+  /* ── QUESTION IMAGE ── */
+  .q-img-upload-area {
+    border:2px dashed var(--border); border-radius:var(--radius); padding:16px;
+    text-align:center; cursor:pointer; transition:border-color 0.15s;
+    background:var(--surface);
+  }
+  .q-img-upload-area:hover { border-color:var(--blue); }
+  .q-img-upload-area.has-img { border-style:solid; border-color:var(--blue-md); padding:8px; }
+  .q-img-preview {
+    max-width:100%; max-height:220px; display:block; margin:0 auto 8px;
+    border-radius:6px; object-fit:contain;
+  }
+  .q-img-remove {
+    background:var(--red-lt,#FEE2E2); color:var(--red); border:none; border-radius:4px;
+    padding:3px 10px; font-size:0.75rem; cursor:pointer; font-weight:600;
+  }
+  .q-img-remove:hover { background:#FECACA; }
+  /* Tampilan gambar di halaman ujian peserta */
+  .exam-q-image {
+    display:block; max-width:100%; max-height:320px; object-fit:contain;
+    margin:12px auto 6px; border-radius:8px;
+    border:1px solid var(--border); box-shadow:0 2px 8px rgba(0,0,0,0.07);
+  }
+
   /* ── EXAM ACCESS TOGGLE ── */
   .access-toggle {
     display:inline-flex; align-items:center; gap:5px;
@@ -2650,6 +2674,7 @@ function addQuestion(data) {
   const q = data || {
     type: 'mc',
     text: '',
+    image: '',
     options: ['', '', '', ''],
     correct: 0,
     points: 10,
@@ -2674,7 +2699,7 @@ function renderQList() {
       <span class="q-num">${i+1}</span>
       <span class="badge ${q.type==='essay'?'badge-gold':'badge-green'}" style="font-size:0.65rem">${q.type==='essay'?'Essay':'PG'}</span>
       ${q.kompetensi ? `<span class="badge badge-gold" style="font-size:0.62rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${q.kompetensi}">🏷 ${q.kompetensi}</span>` : ''}
-      <span class="q-text">${q.text || '(soal belum diisi)'}</span>
+      <span class="q-text">${q.text || '(soal belum diisi)'}${q.image ? ' <span style="color:var(--blue);font-size:0.75rem" title="Ada gambar">🖼</span>' : ''}</span>
       <button class="q-del" onclick="event.stopPropagation();deleteQ(${i})">✕</button>
     </div>
   `).join('');
@@ -2710,6 +2735,23 @@ function editQuestion(i) {
       <div class="form-group">
         <label>Teks Soal</label>
         <textarea id="eq-text" rows="3" onchange="questions[${i}].text=this.value;renderQList()">${q.text}</textarea>
+      </div>
+      <div class="form-group">
+        <label>Gambar Soal <span style="color:var(--muted);font-weight:400;font-size:0.78rem">(opsional, maks. 800 KB)</span></label>
+        <div class="q-img-upload-area ${q.image?'has-img':''}" id="eq-img-wrap"
+             onclick="document.getElementById('eq-img-input').click()"
+             title="Klik untuk unggah gambar">
+          ${q.image
+            ? `<img src="${q.image}" class="q-img-preview" alt="Gambar soal">
+               <button class="q-img-remove" onclick="event.stopPropagation();removeQImage(${i})">✕ Hapus Gambar</button>`
+            : `<div style="color:var(--muted);font-size:0.85rem">
+                 <div style="font-size:1.6rem;margin-bottom:6px">🖼</div>
+                 Klik untuk menambahkan gambar
+               </div>`
+          }
+        </div>
+        <input type="file" id="eq-img-input" accept="image/*" style="display:none"
+          onchange="handleQImageUpload(${i},this)">
       </div>
       <div style="display:grid;grid-template-columns:1fr 100px;gap:12px">
         <div class="form-group" style="margin:0">
@@ -2760,9 +2802,47 @@ function saveQEdit(i) {
   q.text = document.getElementById('eq-text').value;
   q.kompetensi = document.getElementById('eq-kompetensi').value;
   q.points = parseInt(document.getElementById('eq-points').value)||10;
+  // image sudah tersimpan real-time via handleQImageUpload/removeQImage
   updateAdminSummary();
   renderQList();
   toast('Soal disimpan ✓', 'ok');
+}
+
+function handleQImageUpload(i, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const MAX_KB = 800;
+  if (file.size > MAX_KB * 1024) {
+    toast(`Gambar terlalu besar (${(file.size/1024).toFixed(0)} KB). Maksimal ${MAX_KB} KB.`, 'error');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    questions[i].image = e.target.result;
+    // Update preview tanpa re-render seluruh editor
+    const wrap = document.getElementById('eq-img-wrap');
+    if (wrap) {
+      wrap.classList.add('has-img');
+      wrap.innerHTML = `<img src="${e.target.result}" class="q-img-preview" alt="Gambar soal">
+        <button class="q-img-remove" onclick="event.stopPropagation();removeQImage(${i})">✕ Hapus Gambar</button>`;
+    }
+    toast('Gambar ditambahkan ✓', 'ok');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeQImage(i) {
+  questions[i].image = '';
+  const wrap = document.getElementById('eq-img-wrap');
+  if (wrap) {
+    wrap.classList.remove('has-img');
+    wrap.innerHTML = `<div style="color:var(--muted);font-size:0.85rem">
+      <div style="font-size:1.6rem;margin-bottom:6px">🖼</div>
+      Klik untuk menambahkan gambar
+    </div>`;
+  }
+  toast('Gambar dihapus');
 }
 
 // ── Elemen Kompetensi Management ────────────────────────────────────
@@ -2965,6 +3045,7 @@ Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6)
     generated.forEach(q => questions.push({
       type: q.type || 'mc',
       text: q.text || '',
+      image: q.image || '',
       options: q.options || ['','','',''],
       correct: q.correct ?? 0,
       points: q.points || 10,
@@ -3265,6 +3346,17 @@ function renderCurrentQ() {
   document.getElementById('q-counter').textContent = `Soal ${currentQ+1} dari ${total}`;
   document.getElementById('q-progress-bar').style.width = ((currentQ+1)/total*100)+'%';
   document.getElementById('q-text').textContent = q.text;
+  // Tampilkan gambar soal jika ada
+  const existingImg = document.getElementById('q-image-display');
+  if (existingImg) existingImg.remove();
+  if (q.image) {
+    const imgEl = document.createElement('img');
+    imgEl.id = 'q-image-display';
+    imgEl.src = q.image;
+    imgEl.className = 'exam-q-image';
+    imgEl.alt = 'Gambar soal';
+    document.getElementById('q-text').insertAdjacentElement('afterend', imgEl);
+  }
   document.getElementById('q-points').innerHTML = `📌 Poin: ${q.points}${q.kompetensi ? ` &nbsp;|&nbsp; 🏷 <span style="color:var(--gold);font-weight:600">${q.kompetensi}</span>` : ''}`;
 
   document.getElementById('btn-prev').disabled = currentQ === 0;
