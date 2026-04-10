@@ -1609,11 +1609,15 @@ async function cloudSaveExam(exam) {
       const prevAnsDoc = await db.collection('se_answers').doc(exam.id).get();
       if (prevAnsDoc.exists) {
         const prevKey = prevAnsDoc.data().answers || [];
-        // Bandingkan setiap entri: jika ada correct yang berbeda, flag sebagai changed
-        answerKeyChanged = newAnswerKey.some((nk, i) => {
-          const pk = prevKey[i];
-          return !pk || pk.correct !== nk.correct;
-        }) || prevKey.length !== newAnswerKey.length;
+        // Bandingkan setiap entri: correct, points, DAN type — ketiganya mempengaruhi skor
+        answerKeyChanged = prevKey.length !== newAnswerKey.length ||
+          newAnswerKey.some((nk, i) => {
+            const pk = prevKey[i];
+            return !pk
+              || pk.correct !== nk.correct
+              || (pk.points || 10) !== (nk.points || 10)
+              || (pk.type || 'mc') !== (nk.type || 'mc');
+          });
       }
     } catch(e) { /* Jika gagal fetch, asumsikan tidak berubah */ }
 
@@ -1657,9 +1661,13 @@ async function rescoreExamResults(examId, examCode, newAnswerKey) {
       .where('status', '==', 'scored').get();
     if (subSnap.empty) return;
 
-    // Ambil semua se_results untuk exam ini
+    // Ambil semua se_results untuk exam ini — query by examId, bukan examCode
+    // (examCode bisa duplikat antar angkatan, examId selalu unik)
     const resSnap = await db.collection('se_results')
-      .where('examCode', '==', examCode).get();
+      .where('examId', '==', examId).get();
+
+    // Buat Map kunci jawaban berindeks by posisi soal (untuk lookup O(1) yang aman)
+    const answerKeyMap = new Map(newAnswerKey.map((k, i) => [i, k]));
 
     let rescored = 0;
     const batch = db.batch();
@@ -1678,8 +1686,10 @@ async function rescoreExamResults(examId, examCode, newAnswerKey) {
       const mcTotal = newAnswerKey.filter(k => k.type !== 'essay')
         .reduce((s, k) => s + (k.points || 10), 0);
 
-      (sub.answers || []).forEach((sa, i) => {
-        const key = newAnswerKey[sa.questionIndex] || newAnswerKey[i];
+      (sub.answers || []).forEach((sa) => {
+        // Lookup kunci HANYA by questionIndex — jangan fallback ke index iterasi
+        // karena soal bisa diacak, index iterasi != index soal asli
+        const key = answerKeyMap.get(sa.questionIndex);
         if (!key) return;
         if (key.type === 'essay') {
           if (sa.answer) correct++; else unanswered++;
@@ -4138,12 +4148,15 @@ async function prosesNilai() {
       }
 
       const { answers: answerKey } = answerDoc.data();
+      // Buat Map untuk lookup aman by questionIndex (aman saat soal diacak)
+      const answerKeyMap = new Map(answerKey.map((k, i) => [i, k]));
       let earned = 0, correct = 0, wrong = 0, unanswered = 0;
       const details = [];
       const mcTotal = answerKey.filter(k => k.type !== 'essay').reduce((s,k)=>s+(k.points||10),0);
 
-      (sub.answers || []).forEach((sa, i) => {
-        const key = answerKey[sa.questionIndex] || answerKey[i];
+      (sub.answers || []).forEach((sa) => {
+        // Lookup HANYA by questionIndex — jangan fallback ke index iterasi
+        const key = answerKeyMap.get(sa.questionIndex);
         if (!key) return;
         if (key.type === 'essay') {
           if (sa.answer) correct++; else unanswered++;
