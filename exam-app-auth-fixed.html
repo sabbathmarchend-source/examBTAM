@@ -503,6 +503,26 @@
   .cloud-step-body code { font-family:'JetBrains Mono',monospace; font-size:0.76rem; background:var(--blue-lt); padding:1px 5px; border-radius:3px; color:var(--blue); }
 
 
+  /* ── ELEMEN KOMPETENSI MANAGER ── */
+  .ek-list { display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
+  .ek-item {
+    display:flex; align-items:center; gap:4px;
+    padding:5px 8px; background:var(--blue-lt); border:1px solid var(--blue-md);
+    border-radius:var(--radius-sm); font-size:0.78rem; color:var(--blue); font-weight:500;
+  }
+  .ek-item-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ek-edit-input { flex:1; font-size:0.78rem; padding:1px 5px; border:1px solid var(--blue); border-radius:3px; outline:none; color:var(--text); min-width:0; background:#fff; }
+  .ek-btn { background:none; border:none; cursor:pointer; font-size:0.8rem; padding:1px 3px; border-radius:3px; line-height:1; flex-shrink:0; }
+  .ek-btn:hover { background:rgba(0,0,0,0.08); }
+  .ek-btn.edit   { color:var(--muted); }
+  .ek-btn.edit:hover   { color:var(--blue); }
+  .ek-btn.save   { color:var(--green); font-weight:700; }
+  .ek-btn.cancel { color:var(--muted-2); }
+  .ek-btn.del    { color:var(--muted-2); }
+  .ek-btn.cancel:hover, .ek-btn.del:hover { color:var(--red); }
+  .ek-add-row { display:flex; gap:6px; }
+  .ek-add-row input { flex:1; }
+
   /* ── EXAM TYPE SELECTOR ── */
   .exam-type-wrap { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
   .exam-type-btn {
@@ -723,6 +743,20 @@
         <div class="form-group">
           <label>Maks. Peringatan sebelum dikeluarkan</label>
           <input type="number" id="exam-maxwarn" value="3" min="1" max="10">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sidebar-section" id="ek-sidebar-section">
+        <h3>🏷 Elemen Kompetensi</h3>
+        <div id="ek-list" class="ek-list">
+          <div style="color:var(--muted-2);font-size:0.76rem;font-style:italic">Belum ada elemen kompetensi.</div>
+        </div>
+        <div class="ek-add-row">
+          <input type="text" id="ek-input" placeholder="Tambah elemen…" style="font-size:0.8rem;padding:6px 9px"
+            onkeydown="if(event.key==='Enter'){addElemenKompetensi();event.preventDefault()}">
+          <button class="btn btn-gold btn-sm" onclick="addElemenKompetensi()" style="padding:5px 10px">+</button>
         </div>
       </div>
 
@@ -2659,19 +2693,45 @@ function saveQEdit(i) {
 }
 
 // ── Elemen Kompetensi Management ────────────────────────────────────
-function renderElemenKompetensiList() {
+function renderElemenKompetensiList(editIdx = -1) {
   const wrap = document.getElementById('ek-list');
   if (!wrap) return;
   if (elemenKompetensiList.length === 0) {
     wrap.innerHTML = '<div style="color:var(--muted-2);font-size:0.76rem;font-style:italic">Belum ada elemen kompetensi.</div>';
     return;
   }
-  wrap.innerHTML = elemenKompetensiList.map((ek, i) => `
-    <div class="ek-item">
-      <span class="ek-item-text" title="${ek}">${ek}</span>
-      <button class="ek-del" onclick="removeElemenKompetensi(${i})" title="Hapus">✕</button>
-    </div>
-  `).join('');
+  wrap.innerHTML = elemenKompetensiList.map((ek, i) => {
+    if (i === editIdx) {
+      return `<div class="ek-item">
+        <input class="ek-edit-input" id="ek-edit-${i}" type="text" value="${ek.replace(/"/g,'&quot;').replace(/\`/g,'&#96;')}"
+          onkeydown="if(event.key==='Enter'){saveElemenKompetensi(${i});event.stopPropagation()}else if(event.key==='Escape'){renderElemenKompetensiList()}">
+        <button class="ek-btn save"   onclick="saveElemenKompetensi(${i})"  title="Simpan">✓</button>
+        <button class="ek-btn cancel" onclick="renderElemenKompetensiList()" title="Batal">✕</button>
+      </div>`;
+    }
+    const safe = ek.replace(/\`/g,'&#96;').replace(/"/g,'&quot;');
+    return `<div class="ek-item">
+      <span class="ek-item-text" title="${safe}">${safe}</span>
+      <button class="ek-btn edit" onclick="renderElemenKompetensiList(${i})" title="Edit">✏</button>
+      <button class="ek-btn del"  onclick="removeElemenKompetensi(${i})"     title="Hapus">✕</button>
+    </div>`;
+  }).join('');
+  if (editIdx >= 0) {
+    const inp = document.getElementById('ek-edit-' + editIdx);
+    if (inp) { inp.focus(); inp.select(); }
+  }
+}
+
+function saveElemenKompetensi(i) {
+  const inp = document.getElementById('ek-edit-' + i);
+  const val = inp?.value.trim();
+  if (!val) { toast('Nama elemen tidak boleh kosong!', 'error'); inp?.focus(); return; }
+  if (elemenKompetensiList.some((ek, idx) => ek === val && idx !== i)) {
+    toast('Elemen kompetensi sudah ada.', 'error'); inp?.focus(); return;
+  }
+  elemenKompetensiList[i] = val;
+  renderElemenKompetensiList();
+  toast('Elemen kompetensi diperbarui ✓', 'ok');
 }
 
 function addElemenKompetensi() {
