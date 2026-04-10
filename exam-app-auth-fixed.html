@@ -667,10 +667,10 @@
     <div style="text-align:center;line-height:1.65;margin-bottom:20px">
       <div style="font-size:0.72rem;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.04em">Direktorat Jenderal Cipta Karya</div>
       <div style="font-size:0.67rem;color:#64748b;text-transform:uppercase;letter-spacing:0.02em">Direktorat Bina Teknik Bangunan Gedung dan Penyehatan Lingkungan</div>
-      <div style="font-size:0.76rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:0.05em;margin-top:4px">Balai Teknik Air Minum</div>
+      <div style="font-size:1.05rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px">Balai Teknik Air Minum</div>
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px">
         <div style="height:1px;width:40px;background:var(--border-2)"></div>
-        <span style="font-size:0.78rem;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.08em">Bimbingan Teknis</span>
+        <span style="font-size:1.1rem;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:0.08em">Bimbingan Teknis</span>
         <div style="height:1px;width:40px;background:var(--border-2)"></div>
       </div>
       <div style="font-size:0.7rem;color:var(--muted);margin-top:3px">Sistem Ujian Pre Test &amp; Post Test</div>
@@ -3120,18 +3120,9 @@ async function startExam() {
     startBtn.disabled = false;
     startBtn.textContent = origText;
     if (cfg) {
-      const localExam = allExams.find(e => e.id === cfg.id);
-      if (!localExam) {
-        // Exam baru — pakai nilai cloud (default false jika tidak ada)
-        allExams.push({ pretestOpen: false, posttestOpen: false, ...cfg });
+      if (!allExams.find(e => e.id === cfg.id)) {
+        allExams.push(cfg);
         saveAllExams();
-      } else {
-        // Exam sudah ada lokal — pertahankan toggle lokal
-        cfg = {
-          ...cfg,
-          pretestOpen:  localExam.pretestOpen  !== undefined ? localExam.pretestOpen  : (cfg.pretestOpen  ?? false),
-          posttestOpen: localExam.posttestOpen !== undefined ? localExam.posttestOpen : (cfg.posttestOpen ?? false)
-        };
       }
     }
   }
@@ -3164,6 +3155,28 @@ async function startExam() {
       document.getElementById('entry-blocked').classList.remove('hidden');
       document.querySelector('#screen-entry .btn-gold').style.display = 'none';
       return;
+    }
+  }
+
+  // ── Ambil status akses terbaru dari Firestore (wajib fresh, tidak boleh cache) ──
+  if (db) {
+    try {
+      const startBtn2 = document.querySelector('#screen-entry .btn-gold');
+      startBtn2.disabled = true;
+      startBtn2.textContent = '⏳ Memeriksa status ujian...';
+      const freshDoc = await db.collection('se_exams').doc(cfg.id).get();
+      startBtn2.disabled = false;
+      startBtn2.textContent = 'Mulai Ujian →';
+      if (freshDoc.exists) {
+        const freshData = freshDoc.data();
+        // Selalu pakai nilai dari Firestore — inilah sumber kebenaran untuk status buka/tutup
+        cfg.pretestOpen  = freshData.pretestOpen  ?? false;
+        cfg.posttestOpen = freshData.posttestOpen ?? false;
+      }
+    } catch(e) {
+      // Jika gagal fetch, lanjut dengan nilai yang ada (mungkin offline)
+      const startBtn2 = document.querySelector('#screen-entry .btn-gold');
+      if (startBtn2) { startBtn2.disabled = false; startBtn2.textContent = 'Mulai Ujian →'; }
     }
   }
 
