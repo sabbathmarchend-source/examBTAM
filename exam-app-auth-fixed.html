@@ -1597,11 +1597,25 @@ async function cloudSaveExam(exam) {
     // ── Pisahkan kunci jawaban dari data soal ──────────────────────────────
     // Yang disimpan di se_exams (bisa dibaca peserta): soal TANPA field correct
     // Yang disimpan di se_answers (tidak bisa dibaca peserta): hanya kunci jawaban
-    const answerKey = exam.questions.map(q => ({
+    const newAnswerKey = exam.questions.map(q => ({
       correct: q.type === 'essay' ? -1 : (q.correct ?? -1),
       type: q.type || 'mc',
       points: q.points || 10
     }));
+
+    // ── Deteksi perubahan kunci jawaban ────────────────────────────────────
+    let answerKeyChanged = false;
+    try {
+      const prevAnsDoc = await db.collection('se_answers').doc(exam.id).get();
+      if (prevAnsDoc.exists) {
+        const prevKey = prevAnsDoc.data().answers || [];
+        // Bandingkan setiap entri: jika ada correct yang berbeda, flag sebagai changed
+        answerKeyChanged = newAnswerKey.some((nk, i) => {
+          const pk = prevKey[i];
+          return !pk || pk.correct !== nk.correct;
+        }) || prevKey.length !== newAnswerKey.length;
+      }
+    } catch(e) { /* Jika gagal fetch, asumsikan tidak berubah */ }
 
     const publicQuestions = exam.questions.map(q => {
       const { correct, ...rest } = q; // hapus field 'correct'
@@ -1620,11 +1634,100 @@ async function cloudSaveExam(exam) {
     await db.collection('se_answers').doc(exam.id).set({
       examId: exam.id,
       examCode: exam.code,
-      answers: answerKey,
+      answers: newAnswerKey,
       _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
+    // ── Jika kunci jawaban berubah: rescore semua hasil yang sudah ada ─────
+    if (answerKeyChanged) {
+      console.log('Kunci jawaban berubah — memulai rescore otomatis...');
+      await rescoreExamResults(exam.id, exam.code, newAnswerKey);
+    }
+
   } catch(e) { console.warn('Cloud save exam failed:', e); }
+}
+
+// ── Rescore semua hasil (se_results) untuk satu ujian ─────────────────────
+async function rescoreExamResults(examId, examCode, newAnswerKey) {
+  if (!db || !isAdminSignedIn()) return;
+  try {
+    // Ambil semua submission yang sudah scored untuk exam ini
+    const subSnap = await db.collection('se_submissions')
+      .where('examId', '==', examId)
+      .where('status', '==', 'scored').get();
+    if (subSnap.empty) return;
+
+    // Ambil semua se_results untuk exam ini
+    const resSnap = await db.collection('se_results')
+      .where('examCode', '==', examCode).get();
+
+    let rescored = 0;
+    const batch = db.batch();
+
+    for (const resDoc of resSnap.docs) {
+      const res = resDoc.data();
+      if (res._deleted) continue;
+      // Cari submission asli
+      const subDoc = subSnap.docs.find(d => d.id === res.submissionId);
+      if (!subDoc) continue;
+      const sub = subDoc.data();
+
+      // Hitung ulang dengan kunci baru
+      let earned = 0, correct = 0, wrong = 0, unanswered = 0;
+      const details = [];
+      const mcTotal = newAnswerKey.filter(k => k.type !== 'essay')
+        .reduce((s, k) => s + (k.points || 10), 0);
+
+      (sub.answers || []).forEach((sa, i) => {
+        const key = newAnswerKey[sa.questionIndex] || newAnswerKey[i];
+        if (!key) return;
+        if (key.type === 'essay') {
+          if (sa.answer) correct++; else unanswered++;
+          details.push({ idx: sa.questionIndex, type: 'essay', answer: sa.answer || '—', pts: 0 });
+          return;
+        }
+        if (sa.answer === null || sa.answer === undefined) {
+          unanswered++;
+          details.push({ idx: sa.questionIndex, type: 'mc', answer: null, correct: false, pts: 0 });
+          return;
+        }
+        if (sa.answer === key.correct) {
+          correct++; earned += key.points || 10;
+          details.push({ idx: sa.questionIndex, type: 'mc', answer: sa.answer, correct: true, pts: key.points || 10 });
+        } else {
+          wrong++;
+          details.push({ idx: sa.questionIndex, type: 'mc', answer: sa.answer, correct: false, expected: key.correct, pts: 0 });
+        }
+      });
+
+      const newScore = mcTotal > 0 ? Math.round(earned / mcTotal * 100) : 0;
+      batch.update(resDoc.ref, {
+        score: newScore, correct, wrong, unanswered, details,
+        _rescored: true,
+        _rescoredAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Perbarui localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem('secureexam_results') || '[]');
+        const localIdx = stored.findIndex(r => r.submissionId === res.submissionId);
+        if (localIdx >= 0) {
+          stored[localIdx] = { ...stored[localIdx], score: newScore, correct, wrong, unanswered, details, _rescored: true };
+          localStorage.setItem('secureexam_results', JSON.stringify(stored));
+        }
+      } catch(_) {}
+
+      rescored++;
+    }
+
+    if (rescored > 0) {
+      await batch.commit();
+      toast(`⚡ Kunci jawaban berubah — ${rescored} hasil diperiksa ulang otomatis.`, 'ok');
+      renderDashboard();
+    }
+  } catch(e) {
+    console.warn('Rescore failed:', e);
+  }
 }
 
 async function cloudUpdateExamAccess(examId, pretestOpen, posttestOpen) {
@@ -2394,12 +2497,19 @@ async function goAdmin() {
           } else {
             const idx = allExams.findIndex(e => e.id === ce.id);
             if (idx >= 0) {
-              // PENTING: pertahankan nilai toggle lokal — hanya admin yang bisa mengubahnya
-              // Jangan biarkan cloud sync menimpa pretestOpen/posttestOpen
+              // PENTING 1: pertahankan toggle lokal
               const localPre  = allExams[idx].pretestOpen;
               const localPost = allExams[idx].posttestOpen;
+              // PENTING 2: pertahankan field `correct` per soal dari lokal
+              // se_exams TIDAK menyimpan `correct` (keamanan) — hanya ada di localStorage
+              const localQs = allExams[idx].questions || [];
+              const mergedQs = (ce.questions || []).map((cq, qi) => ({
+                ...cq,
+                correct: localQs[qi]?.correct !== undefined ? localQs[qi].correct : (cq.correct ?? 0)
+              }));
               allExams[idx] = {
                 ...ce,
+                questions: mergedQs,
                 pretestOpen:  localPre  !== undefined ? localPre  : (ce.pretestOpen  ?? false),
                 posttestOpen: localPost !== undefined ? localPost : (ce.posttestOpen ?? false)
               };
