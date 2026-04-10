@@ -503,6 +503,19 @@
   .cloud-step-body code { font-family:'JetBrains Mono',monospace; font-size:0.76rem; background:var(--blue-lt); padding:1px 5px; border-radius:3px; color:var(--blue); }
 
 
+  /* ── EXAM ACCESS TOGGLE ── */
+  .access-toggle {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 9px; border-radius:20px; font-size:0.7rem; font-weight:700;
+    cursor:pointer; border:1.5px solid; transition:all 0.15s;
+    white-space:nowrap; user-select:none;
+  }
+  .access-toggle.open  { background:var(--green-lt); color:var(--green); border-color:#A7F3D0; }
+  .access-toggle.open:hover  { background:#BBF7D0; }
+  .access-toggle.closed{ background:var(--bg-3); color:var(--muted); border-color:var(--border); }
+  .access-toggle.closed:hover{ background:var(--border); }
+  .access-dot { width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
+
   /* ── ELEMEN KOMPETENSI MANAGER ── */
   .ek-list { display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
   .ek-item {
@@ -1590,6 +1603,16 @@ async function cloudSaveExam(exam) {
   } catch(e) { console.warn('Cloud save exam failed:', e); }
 }
 
+async function cloudUpdateExamAccess(examId, pretestOpen, posttestOpen) {
+  if (!db) return;
+  try {
+    await db.collection('se_exams').doc(examId).update({
+      pretestOpen, posttestOpen,
+      _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) { console.warn('Cloud update access failed:', e); }
+}
+
 async function cloudDeleteExam(examId) {
   if (!db) return;
   try {
@@ -2387,12 +2410,28 @@ function renderExamList() {
             &nbsp;·&nbsp; <span style="color:${attempts.length>0?'var(--red)':'var(--green)'}">🔑 ${attempts.length} percobaan</span>
           </div>
         </div>
-        <div class="exam-card-actions">
-          <button class="btn btn-green btn-sm" onclick="event.stopPropagation();copyExamStudentLink('${exam.id}')" title="Salin link peserta untuk ujian ini">🔗</button>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();manageAttempts('${exam.id}')" title="Kelola percobaan peserta">🔑</button>
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportSingleExam('${exam.id}')" title="Export JSON">⬆</button>
-          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openExamEditor('${exam.id}')">✏️ Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteExam('${exam.id}')">✕</button>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
+            <span class="access-toggle ${exam.pretestOpen  ? 'open' : 'closed'}"
+                  onclick="event.stopPropagation();toggleExamAccess('${exam.id}','pretest')"
+                  title="Klik untuk buka/tutup Pre Test">
+              <span class="access-dot"></span>
+              Pre Test: ${exam.pretestOpen  ? 'DIBUKA' : 'DITUTUP'}
+            </span>
+            <span class="access-toggle ${exam.posttestOpen ? 'open' : 'closed'}"
+                  onclick="event.stopPropagation();toggleExamAccess('${exam.id}','posttest')"
+                  title="Klik untuk buka/tutup Post Test">
+              <span class="access-dot"></span>
+              Post Test: ${exam.posttestOpen ? 'DIBUKA' : 'DITUTUP'}
+            </span>
+          </div>
+          <div class="exam-card-actions">
+            <button class="btn btn-green btn-sm" onclick="event.stopPropagation();copyExamStudentLink('${exam.id}')" title="Salin link peserta untuk ujian ini">🔗</button>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();manageAttempts('${exam.id}')" title="Kelola percobaan peserta">🔑</button>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();exportSingleExam('${exam.id}')" title="Export JSON">⬆</button>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openExamEditor('${exam.id}')">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteExam('${exam.id}')">✕</button>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -2447,6 +2486,21 @@ function openExamEditor(id) {
   renderQList();
   updateAdminSummary();
   switchAdminTab('soal');
+  renderExamList();
+}
+
+function toggleExamAccess(id, type) {
+  const exam = allExams.find(e => e.id === id);
+  if (!exam) return;
+  if (type === 'pretest') {
+    exam.pretestOpen = !exam.pretestOpen;
+    toast(exam.pretestOpen ? '✅ Pre Test dibuka untuk peserta' : '🔒 Pre Test ditutup', exam.pretestOpen ? 'ok' : '');
+  } else {
+    exam.posttestOpen = !exam.posttestOpen;
+    toast(exam.posttestOpen ? '✅ Post Test dibuka untuk peserta' : '🔒 Post Test ditutup', exam.posttestOpen ? 'ok' : '');
+  }
+  saveAllExams();
+  cloudUpdateExamAccess(exam.id, exam.pretestOpen, exam.posttestOpen);
   renderExamList();
 }
 
@@ -2802,7 +2856,9 @@ async function saveCurrentExam() {
       shuffle:    document.getElementById('ac-shuffle').checked,
     },
     questions: JSON.parse(JSON.stringify(questions)),
-    elemenKompetensi: [...elemenKompetensiList]
+    elemenKompetensi: [...elemenKompetensiList],
+    pretestOpen:  activeExamId ? (allExams.find(e=>e.id===activeExamId)?.pretestOpen  ?? false) : false,
+    posttestOpen: activeExamId ? (allExams.find(e=>e.id===activeExamId)?.posttestOpen ?? false) : false
   };
   if (!activeExamId) {
     activeExamId = exam.id;
@@ -3081,6 +3137,17 @@ async function startExam() {
       document.querySelector('#screen-entry .btn-gold').style.display = 'none';
       return;
     }
+  }
+
+  // ── Cek akses: apakah ujian type ini sedang dibuka oleh admin ──────────
+  const isOpen = selectedExamType === 'pretest' ? cfg.pretestOpen : cfg.posttestOpen;
+  if (!isOpen) {
+    const typeLabel = selectedExamType === 'pretest' ? 'Pre Test' : 'Post Test';
+    document.getElementById('entry-blocked-msg').textContent =
+      `${typeLabel} untuk ujian "${cfg.name}" belum dibuka oleh pengawas. Harap menunggu instruksi pengawas sebelum memulai ujian.`;
+    document.getElementById('entry-blocked').classList.remove('hidden');
+    document.querySelector('#screen-entry .btn-gold').style.display = 'none';
+    return;
   }
 
   // ── One-time attempt check ──────────────────
