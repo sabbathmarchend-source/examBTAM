@@ -1970,7 +1970,9 @@ async function cloudLoadResults(examCode) {
     let q = db.collection('se_results');
     if (examCode) q = q.where('examCode', '==', examCode);
     const snap = await q.get();
-    const results = snap.docs.map(d => ({ _cloudId: d.id, ...d.data() }));
+    const results = snap.docs
+      .filter(d => !d.data()._deleted)
+      .map(d => ({ _cloudId: d.id, ...d.data() }));
     // Urutkan di client berdasarkan submittedAt (terbaru dulu)
     results.sort((a, b) => {
       const ta = a.scoredAt?.seconds || 0;
@@ -1986,7 +1988,14 @@ async function cloudLoadResults(examCode) {
 
 async function cloudDeleteResult(cloudId) {
   if (!db || !cloudId) return;
-  try { await db.collection('se_results').doc(cloudId).delete(); } catch(e) {}
+  // Soft delete: tandai _deleted agar submissionId tetap ada di se_results.
+  // Ini mencegah prosesNilai() menilai ulang submission yang sudah pernah diproses.
+  try {
+    await db.collection('se_results').doc(cloudId).update({ _deleted: true });
+  } catch(e) {
+    // Fallback ke hard delete jika update gagal (misal permission)
+    try { await db.collection('se_results').doc(cloudId).delete(); } catch(_) {}
+  }
 }
 
 async function cloudDeleteResultsByExam(examCode) {
@@ -3640,9 +3649,22 @@ async function prosesNilai() {
       return;
     }
 
+    // Ambil semua submissionId yang sudah ada di se_results (termasuk soft-deleted)
+    // untuk mencegah penilaian ganda, bahkan setelah hasil dihapus.
+    const alreadyScored = new Set();
+    try {
+      const resSnap = await db.collection('se_results').get();
+      resSnap.docs.forEach(d => {
+        const sid = d.data().submissionId;
+        if (sid) alreadyScored.add(sid);
+      });
+    } catch(_) {}
+
     let processed = 0;
     let errors = 0;
     for (const doc of snap.docs) {
+      // Skip jika submission ini sudah punya hasil (mencegah penilaian ganda)
+      if (alreadyScored.has(doc.id)) continue;
       const sub = doc.data();
 
       // Ambil kunci jawaban — hanya bisa diakses jika admin sudah login
@@ -3777,7 +3799,10 @@ async function renderDashboard() {
             if (sid) scored.add(sid);
           });
         } catch(_) {}
-        const pending = subSnap.docs.filter(d => !scored.has(d.id)).length;
+        // Hanya hitung submission yang belum ada hasilnya DAN statusnya masih 'pending'
+        const pending = subSnap.docs.filter(d =>
+          !scored.has(d.id) && d.data().status === 'pending'
+        ).length;
         if (pending > 0) {
           prosesBtn.textContent = `⚡ Proses Nilai (${pending} pending)`;
           prosesBtn.style.background = 'var(--amber)';
