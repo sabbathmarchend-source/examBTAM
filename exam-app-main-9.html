@@ -5157,6 +5157,7 @@ function switchAdminTab(tab) {
 
   if (tab === 'ujian') {
     ujianPanel.classList.remove('hidden');
+    renderExamList();
   } else if (tab === 'soal') {
     layout.style.display = '';
     sidebar.style.display = '';
@@ -6767,8 +6768,7 @@ function downloadCSVTemplate() {
     'noPeserta,nama,instansi,kabKota,provinsi',
     '2024001,Nama Lengkap Peserta,Nama Instansi,Kota/Kabupaten,Provinsi'
   ];
-  const blob = new Blob([rows.join('
-')], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'template-peserta.csv';
@@ -6786,8 +6786,7 @@ function exportParticipantCSV() {
     'noPeserta,nama,instansi,kabKota,provinsi',
     ...list.map(p => [p.noPeserta,p.nama,p.instansi,p.kabKota||'',p.provinsi||''].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','))
   ];
-  const blob = new Blob([rows.join('
-')], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `peserta-${exam?.code||_pModalExamId}.csv`;
