@@ -1794,6 +1794,10 @@
         <input type="text" id="student-name" placeholder="Nama akan terisi otomatis jika terdaftar">
       </div>
       <div class="form-group">
+        <label>Instansi</label>
+        <input type="text" id="student-instansi" placeholder="Instansi akan terisi otomatis jika terdaftar">
+      </div>
+      <div class="form-group">
         <label>Kode Ujian</label>
         <input type="text" id="entry-code" placeholder="Masukkan kode dari pengawas" style="text-transform:uppercase;letter-spacing:2px" oninput="checkPostTestEligibility()">
       </div>
@@ -3405,6 +3409,15 @@ function showScreen(name) {
   if (name === 'entry') {
     document.getElementById('entry-blocked').classList.add('hidden');
     document.querySelector('#screen-entry .btn-gold').style.display = '';
+    // Reset entry fields
+    ['student-id','student-name','student-instansi','entry-code'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = ''; el.disabled = false; el.style.background = ''; }
+    });
+    const afb = document.getElementById('entry-autofill-banner');
+    if (afb) afb.style.display = 'none';
+    const rc = document.getElementById('rules-agree');
+    if (rc) rc.checked = false;
     // Reset exam type selection fully
     selectedExamType = null;
     document.getElementById('type-btn-pretest')?.classList.remove('selected');
@@ -4381,10 +4394,11 @@ async function startExam() {
 
   examConfig  = cfg;
   acSettings  = cfg.ac || {};
-  // Re-read name in case it was auto-filled by whitelist
-  const finalName = document.getElementById('student-name').value.trim();
+  // Re-read name & instansi in case they were auto-filled by whitelist
+  const finalName     = document.getElementById('student-name').value.trim();
+  const finalInstansi = document.getElementById('student-instansi')?.value.trim() || '';
   if (!finalName) { toast('Nama peserta tidak dapat ditemukan. Hubungi pengawas.', 'error'); return; }
-  studentInfo = { name: finalName, id: sid, examType: selectedExamType };
+  studentInfo = { name: finalName, id: sid, instansi: finalInstansi, examType: selectedExamType };
   answers     = {};
   violations  = [];
   warnCount   = 0;
@@ -4822,7 +4836,7 @@ async function submitExam(timeUp=false, forceStop=false) {
   }));
 
   const submissionData = {
-    name: studentInfo.name, id: studentInfo.id,
+    name: studentInfo.name, id: studentInfo.id, instansi: studentInfo.instansi || '',
     examId: examConfig.id, examCode: examConfig.code, examName: examConfig.name,
     examType, answers: submissionAnswers, violations, warnCount,
     submittedAt: new Date().toLocaleString('id-ID'),
@@ -4935,7 +4949,7 @@ function _scoreAndShowWithKey(submissionAnswers, answerKey, submissionId) {
     if (db) {
       const result = {
         submissionId: submissionId,
-        name: studentInfo.name, id: studentInfo.id,
+        name: studentInfo.name, id: studentInfo.id, instansi: studentInfo.instansi || '',
         examId: examConfig.id,
         examName: examConfig.name, examCode: examConfig.code, examType: studentInfo.examType || 'pretest',
         score, correct, wrong, unanswered,
@@ -5035,7 +5049,7 @@ function _scoreAndShow(submissionAnswers) {
     }
 
     const resultData = {
-      name: studentInfo.name, id: studentInfo.id,
+      name: studentInfo.name, id: studentInfo.id, instansi: studentInfo.instansi || '',
       examName: examConfig.name, examCode: examConfig.code,
       examType: studentInfo.examType || 'pretest',
       submittedAt: new Date().toLocaleString('id-ID'),
@@ -6804,26 +6818,24 @@ async function onStudentIdInput() {
 }
 
 async function autoFillStudentName() {
-  const sid  = document.getElementById('student-id').value.trim();
-  const code = document.getElementById('entry-code').value.trim().toUpperCase();
-  const nameInput = document.getElementById('student-name');
-  const banner    = document.getElementById('entry-autofill-banner');
-  const bannerTxt = document.getElementById('entry-autofill-text');
+  const sid         = document.getElementById('student-id').value.trim();
+  const code        = document.getElementById('entry-code').value.trim().toUpperCase();
+  const nameInput   = document.getElementById('student-name');
+  const instansiInput = document.getElementById('student-instansi');
+  const banner      = document.getElementById('entry-autofill-banner');
+  const bannerTxt   = document.getElementById('entry-autofill-text');
 
-  if (!sid || !code) {
-    nameInput.disabled  = false;
-    nameInput.style.background = '';
+  function resetFields() {
+    nameInput.value = ''; nameInput.disabled = false; nameInput.style.background = '';
+    if (instansiInput) { instansiInput.value = ''; instansiInput.disabled = false; instansiInput.style.background = ''; }
     banner.style.display = 'none';
-    return;
   }
+
+  if (!sid || !code) { resetFields(); return; }
 
   loadAllExams();
   const cfg = findExamByCode(code) || (db ? await cloudFindExamByCode(code).catch(()=>null) : null);
-  if (!cfg) {
-    nameInput.disabled = false;
-    banner.style.display = 'none';
-    return;
-  }
+  if (!cfg) { resetFields(); return; }
 
   // Try cloud first, then local
   let pData = null;
@@ -6835,25 +6847,22 @@ async function autoFillStudentName() {
   }
   if (!pData) pData = getParticipantsForExam(cfg.id);
 
-  if (!pData || !pData.whitelistActive) {
-    nameInput.disabled = false;
-    nameInput.style.background = '';
-    banner.style.display = 'none';
-    return;
-  }
+  if (!pData || !pData.whitelistActive) { resetFields(); return; }
 
   const found = (pData.list||[]).find(p => p.noPeserta.toLowerCase() === sid.toLowerCase());
   if (found) {
     nameInput.value    = found.nama;
     nameInput.disabled = true;
     nameInput.style.background = 'var(--green-lt)';
-    bannerTxt.textContent = `Terdaftar sebagai: ${found.nama} — ${found.instansi}${found.kabKota ? ', '+found.kabKota : ''}`;
+    if (instansiInput) {
+      instansiInput.value    = found.instansi || '';
+      instansiInput.disabled = true;
+      instansiInput.style.background = 'var(--green-lt)';
+    }
+    bannerTxt.textContent = `Terdaftar sebagai: ${found.nama} — ${found.instansi||''}${found.kabKota ? ', '+found.kabKota : ''}`;
     banner.style.display = 'flex';
   } else {
-    nameInput.value    = '';
-    nameInput.disabled = false;
-    nameInput.style.background = '';
-    banner.style.display = 'none';
+    resetFields();
   }
 }
 
