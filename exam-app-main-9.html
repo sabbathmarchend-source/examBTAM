@@ -744,7 +744,7 @@
   /* ════════════════════════════════════
      PARTICIPANT WHITELIST MODAL
   ════════════════════════════════════ */
-  .participant-modal { max-width:780px !important; }
+  .participant-modal { max-width:780px !important; max-height:85vh; overflow-y:auto; }
   .ptab-nav { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:16px; }
   .ptab-btn {
     padding:8px 18px; font-size:0.8rem; font-weight:600; color:var(--muted);
@@ -4230,13 +4230,14 @@ async function startExam() {
   document.getElementById('entry-blocked').classList.add('hidden');
   document.querySelector('#screen-entry .btn-gold').style.display = '';
 
-  if (!name || !sid) { toast('Isi nama dan nomor peserta!', 'error'); return; }
-  if (!code)         { toast('Isi kode ujian!', 'error'); return; }
+  if (!sid)  { toast('Isi nomor peserta!', 'error'); return; }
+  if (!code) { toast('Isi kode ujian!', 'error'); return; }
   if (!selectedExamType) {
     toast('Pilih jenis ujian: Pre Test atau Post Test!', 'error');
     return;
   }
-  if (!agreed)       { toast('Anda harus menyetujui peraturan ujian!', 'error'); return; }
+  if (!agreed) { toast('Anda harus menyetujui peraturan ujian!', 'error'); return; }
+  // name will be validated after whitelist auto-fill (or user input if no whitelist)
 
   // ── Find exam ──────────────────────────────
   loadAllExams();
@@ -4293,7 +4294,7 @@ async function startExam() {
     }
     if (!donePre) {
       document.getElementById('entry-blocked-msg').textContent =
-        `"${name}" belum menyelesaikan Pre Test untuk ujian "${cfg.name}". Selesaikan Pre Test terlebih dahulu sebelum mengerjakan Post Test.`;
+        `Peserta dengan No. ${sid} belum menyelesaikan Pre Test untuk ujian "${cfg.name}". Selesaikan Pre Test terlebih dahulu sebelum mengerjakan Post Test.`;
       document.getElementById('entry-blocked').classList.remove('hidden');
       document.querySelector('#screen-entry .btn-gold').style.display = 'none';
       return;
@@ -4336,6 +4337,30 @@ async function startExam() {
     return;
   }
 
+  // ── Whitelist check ─────────────────────────────────────────────────────
+  {
+    let wlData = null;
+    if (db) {
+      try {
+        const wlDoc = await db.collection('se_participants').doc(cfg.id).get();
+        if (wlDoc.exists) wlData = wlDoc.data();
+      } catch(e) {}
+    }
+    if (!wlData) wlData = getParticipantsForExam(cfg.id);
+    if (wlData && wlData.whitelistActive) {
+      const found = (wlData.list||[]).find(p => p.noPeserta.toLowerCase() === sid.toLowerCase());
+      if (!found) {
+        document.getElementById('entry-blocked-msg').textContent =
+          `Nomor peserta "${sid}" tidak terdaftar dalam ujian ini. Pastikan nomor peserta sesuai atau hubungi pengawas.`;
+        document.getElementById('entry-blocked').classList.remove('hidden');
+        document.querySelector('#screen-entry .btn-gold').style.display = 'none';
+        return;
+      }
+      // Always use the name from whitelist, ignoring whatever was typed
+      document.getElementById('student-name').value = found.nama;
+    }
+  }
+
   // ── One-time attempt check ──────────────────
   let alreadyAttempted = hasAttempted(code, sid, selectedExamType);
   if (!alreadyAttempted && db) {
@@ -4348,7 +4373,7 @@ async function startExam() {
   if (alreadyAttempted) {
     const typeLabel = selectedExamType === 'pretest' ? 'Pre Test' : 'Post Test';
     document.getElementById('entry-blocked-msg').textContent =
-      `"${name}" dengan No. Peserta ${sid} sudah pernah mengikuti ${typeLabel} untuk ujian "${cfg.name}". Hubungi pengawas jika ada kesalahan.`;
+      `No. Peserta ${sid} sudah pernah mengikuti ${typeLabel} untuk ujian "${cfg.name}". Hubungi pengawas jika ada kesalahan.`;
     document.getElementById('entry-blocked').classList.remove('hidden');
     document.querySelector('#screen-entry .btn-gold').style.display = 'none';
     return;
@@ -4356,7 +4381,10 @@ async function startExam() {
 
   examConfig  = cfg;
   acSettings  = cfg.ac || {};
-  studentInfo = { name, id: sid, examType: selectedExamType };
+  // Re-read name in case it was auto-filled by whitelist
+  const finalName = document.getElementById('student-name').value.trim();
+  if (!finalName) { toast('Nama peserta tidak dapat ditemukan. Hubungi pengawas.', 'error'); return; }
+  studentInfo = { name: finalName, id: sid, examType: selectedExamType };
   answers     = {};
   violations  = [];
   warnCount   = 0;
@@ -6835,50 +6863,7 @@ async function autoFillStudentName() {
   }
 }
 
-// Hook into startExam: validate whitelist before proceeding
-const _origStartExam = startExam;
-window._whitelistValidatedExamId = null;
-
-async function startExam() {
-  const sid  = document.getElementById('student-id').value.trim();
-  const code = document.getElementById('entry-code').value.trim().toUpperCase();
-
-  // Find exam config (quick local check)
-  loadAllExams();
-  let cfg = findExamByCode(code);
-  if (!cfg && db) {
-    try { cfg = await cloudFindExamByCode(code); } catch(e) {}
-  }
-
-  if (cfg) {
-    // Load participant data — prefer cloud for freshness
-    let pData = null;
-    if (db) {
-      try {
-        const doc = await db.collection('se_participants').doc(cfg.id).get();
-        if (doc.exists) pData = doc.data();
-      } catch(e) {}
-    }
-    if (!pData) pData = getParticipantsForExam(cfg.id);
-
-    if (pData && pData.whitelistActive) {
-      const found = (pData.list||[]).find(p => p.noPeserta.toLowerCase() === sid.toLowerCase());
-      if (!found) {
-        toast('Nomor peserta tidak terdaftar dalam sistem. Hubungi pengawas.', 'error');
-        document.getElementById('entry-blocked-msg').textContent =
-          `Nomor peserta "${sid}" tidak terdaftar dalam ujian ini. Pastikan nomor peserta sesuai atau hubungi pengawas.`;
-        document.getElementById('entry-blocked').classList.remove('hidden');
-        document.querySelector('#screen-entry .btn-gold').style.display = 'none';
-        return;
-      }
-      // Auto-fill name from whitelist (ensure it's correct even if field was edited)
-      document.getElementById('student-name').value = found.nama;
-    }
-  }
-
-  // Proceed to original startExam logic
-  return _origStartExam();
-}
+// Whitelist validation is handled inside the main startExam function below
 
 // Patch entry-code input to also trigger auto-fill
 document.getElementById('entry-code')?.addEventListener('input', function() {
@@ -7028,26 +7013,9 @@ function downloadExcelKehadiran() {
   toast('File kehadiran berhasil didownload!', 'ok');
 }
 
-// Also inject into buildExcel so Sheet 5 appears in full Excel export
-const _origBuildExcel = buildExcel;
-function buildExcel(results, filename) {
-  _origBuildExcel(results, filename);
-  // Sheet 5 appended separately — we reopen the XLSX here
-  // (Not easily doable since XLSX.writeFile already ran; 
-  //  kehadiran sheet available via dedicated downloadExcelKehadiran)
-}
+// Kehadiran export is available via dedicated downloadExcelKehadiran button
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Populate kehadiran exam filter when switching to hasil tab
-// ══════════════════════════════════════════════════════════════════════════════
-const _origSwitchAdminTab = switchAdminTab;
-function switchAdminTab(tab) {
-  _origSwitchAdminTab(tab);
-  if (tab === 'hasil') {
-    // small delay so DOM is visible first
-    setTimeout(populateKehadiranExamFilter, 100);
-  }
-}
+// Populate kehadiran filter is called from switchDashTab directly
 </script>
 
 </body>
