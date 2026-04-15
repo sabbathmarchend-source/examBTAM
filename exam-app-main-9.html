@@ -6185,8 +6185,8 @@ function showFileProtocolHelp() {
   document.getElementById('exam-duration').addEventListener('input', updateAdminSummary);
 
   // Live eligibility check: whenever student-id or entry-code changes, re-check post test lock
-  document.getElementById('student-id')?.addEventListener('blur', onStudentIdInput);
-  document.getElementById('student-id')?.addEventListener('change', onStudentIdInput);
+  document.getElementById('student-id')?.addEventListener('blur',   () => onStudentIdInput());
+  document.getElementById('student-id')?.addEventListener('change', () => onStudentIdInput());
   document.getElementById('entry-code')?.addEventListener('blur', checkPostTestEligibility);
   document.getElementById('entry-code')?.addEventListener('change', checkPostTestEligibility);
 
@@ -6648,12 +6648,7 @@ function parseCSVFile(file) {
 }
 
 function parseCSVText(text) {
-  const lines = text.replace(/
-/g,'
-').replace(/
-/g,'
-').split('
-').filter(l => l.trim());
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l => l.trim());
   if (lines.length < 2) return { valid: [], errors: ['File kosong atau hanya berisi header.'] };
 
   // Parse header
