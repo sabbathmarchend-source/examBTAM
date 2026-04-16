@@ -2293,10 +2293,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Daftar peserta whitelist — semua boleh baca, hanya admin yang bisa tulis
+    // Daftar peserta whitelist — semua boleh baca dan tulis
     match /se_participants/{doc} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if true;
     }
   }
 }</pre>
@@ -6438,7 +6438,7 @@ async function setParticipantsForExam(examId, obj) {
 
 // ── Cloud sync (PRIMARY write) ─────────────────────────────────────────────
 async function cloudSyncParticipants(examId, obj) {
-  if (!db || !isAdminSignedIn()) return;
+  if (!db) return;
   try {
     await db.collection('se_participants').doc(examId).set({
       ...obj,
