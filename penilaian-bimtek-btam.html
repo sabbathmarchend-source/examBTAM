@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bimbingan Teknis BTAM — Sistem Penilaian Komprehensif</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+:root{--bg:#F8FAFC;--bg-2:#FFFFFF;--bg-3:#F1F5F9;--surface:#FFFFFF;--blue:#1D4ED8;--blue-2:#1E40AF;--blue-lt:#EFF6FF;--blue-md:#DBEAFE;--red:#DC2626;--red-lt:#FEF2F2;--green:#059669;--green-lt:#ECFDF5;--amber:#D97706;--amber-lt:#FFFBEB;--purple:#7C3AED;--purple-lt:#F5F3FF;--text:#0F172A;--text-2:#334155;--muted:#64748B;--muted-2:#94A3B8;--border:#E2E8F0;--border-2:#CBD5E1;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 16px rgba(0,0,0,.08);--shadow-lg:0 12px 40px rgba(0,0,0,.1);--radius:10px;--radius-sm:6px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6;}
+.hidden{display:none!important;}
+.app-header{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;border-bottom:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow);position:sticky;top:0;z-index:100;gap:12px;flex-wrap:wrap;}
+.logo{font-size:1rem;font-weight:700;color:var(--blue);letter-spacing:-.01em;white-space:nowrap;cursor:pointer;}
+.logo span{color:var(--muted);font-weight:500;font-size:.78rem;margin-left:6px;}
+.header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--radius-sm);border:none;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1;}
+.btn-primary{background:var(--blue);color:#fff;}.btn-primary:hover{background:var(--blue-2);box-shadow:0 4px 12px rgba(29,78,216,.3);}
+.btn-outline{background:transparent;color:var(--blue);border:1.5px solid var(--blue);}.btn-outline:hover{background:var(--blue-lt);}
+.btn-danger{background:var(--red);color:#fff;}.btn-danger:hover{background:#B91C1C;}
+.btn-green{background:var(--green);color:#fff;}.btn-green:hover{background:#047857;}
+.btn-ghost{background:var(--bg-3);color:var(--text-2);border:1px solid var(--border);}.btn-ghost:hover{background:var(--border);}
+.btn-sm{padding:5px 12px;font-size:.76rem;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;box-shadow:0 4px 20px -5px rgba(0,0,0,.05);}
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:.76rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;}
+input[type="text"],input[type="number"],input[type="password"],input[type="email"],textarea,select{width:100%;padding:9px 12px;background:var(--bg-3);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:.88rem;transition:border-color .15s,box-shadow .15s;outline:none;}
+input:focus,textarea:focus,select:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(29,78,216,.12);}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:600;letter-spacing:.03em;}
+.badge-blue{background:var(--blue-lt);color:var(--blue);border:1px solid var(--blue-md);}
+.badge-green{background:var(--green-lt);color:var(--green);border:1px solid #A7F3D0;}
+.badge-red{background:var(--red-lt);color:var(--red);border:1px solid #FECACA;}
+.badge-amber{background:var(--amber-lt);color:var(--amber);border:1px solid #FDE68A;}
+.badge-purple{background:var(--purple-lt);color:var(--purple);border:1px solid #DDD6FE;}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 32px;overflow-x:auto;}
+.tab{padding:12px 20px;font-size:.82rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.tab:hover{color:var(--text);}.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+.tab .tab-badge{background:var(--blue);color:#fff;font-size:.65rem;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
+.data-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.data-table th{text-align:left;padding:9px 12px;font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border);background:var(--bg-3);white-space:nowrap;position:sticky;top:0;z-index:2;}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+.data-table tr:hover td{background:rgba(29,78,216,.03);}
+.data-table input[type="number"]{width:64px;padding:4px 6px;font-size:.8rem;text-align:center;}
+.score-chip{display:inline-block;padding:2px 9px;border-radius:20px;font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:700;}
+.score-high{background:var(--green-lt);color:var(--green);}.score-mid{background:var(--amber-lt);color:var(--amber);}.score-low{background:var(--red-lt);color:var(--red);}
+.main-content{padding:28px 32px;max-width:1400px;margin:0 auto;}
+.section-title{font-size:1.1rem;font-weight:700;margin-bottom:18px;color:var(--text);display:flex;align-items:center;gap:8px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);}
+.stat-val{font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:var(--blue);display:block;}
+.stat-lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+.stat-sub{font-size:.74rem;color:var(--muted-2);margin-top:2px;}
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:768px){.config-grid{grid-template-columns:1fr;}}
+.weight-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius-sm);transition:all .15s;}
+.weight-item.disabled{opacity:.5;}
+.weight-item .w-label{flex:1;font-size:.85rem;font-weight:600;color:var(--text);}
+.weight-item .w-input{width:70px;text-align:center;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.weight-total{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:700;padding:12px 16px;border-radius:var(--radius-sm);text-align:center;margin-top:12px;}
+.weight-total.valid{background:var(--green-lt);color:var(--green);border:1px solid #A7F3D0;}
+.weight-total.invalid{background:var(--red-lt);color:var(--red);border:1px solid #FECACA;}
+.toggle-wrap{display:flex;align-items:center;gap:10px;}
+.toggle{position:relative;width:44px;height:24px;border-radius:12px;background:var(--border-2);cursor:pointer;transition:background .2s;flex-shrink:0;}
+.toggle.on{background:var(--blue);}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s;}
+.toggle.on::after{transform:translateX(20px);}
+.toggle-label{font-size:.82rem;font-weight:500;color:var(--text-2);}
+.instructor-list{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.instructor-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius-sm);}
+.instructor-item input[type="text"]{flex:1;}
+.firebase-status{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:600;border:1px solid;cursor:pointer;}
+.firebase-status.connected{background:var(--green-lt);color:var(--green);border-color:#A7F3D0;}
+.firebase-status.disconnected{background:var(--bg-3);color:var(--muted);border-color:var(--border);}
+.fb-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:600px;width:100%;box-shadow:var(--shadow-lg);max-height:90vh;overflow-y:auto;}
+.modal h2{font-size:1.15rem;color:var(--text);margin-bottom:16px;}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--text);color:#fff;padding:10px 22px;border-radius:var(--radius);font-size:.84rem;font-weight:600;z-index:999;transition:transform .3s;box-shadow:var(--shadow-lg);}
+#toast.show{transform:translateX(-50%) translateY(0);}
+#toast.toast-ok{background:var(--green);}
+#toast.toast-error{background:var(--red);}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty-state .icon{font-size:3rem;margin-bottom:12px;}
+.empty-state p{font-size:.88rem;max-width:400px;margin:0 auto;line-height:1.6;}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);}
+#screen-kegiatan{min-height:calc(100vh - 57px);padding:40px 32px;}
+.kegiatan-header{max-width:900px;margin:0 auto 32px;text-align:center;}
+.kegiatan-header h1{font-size:1.8rem;color:var(--text);margin-bottom:6px;}
+.kegiatan-header p{font-size:.9rem;color:var(--muted);}
+.kegiatan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;max-width:900px;margin:0 auto;}
+.kegiatan-card{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:24px;cursor:pointer;transition:all .2s;box-shadow:var(--shadow);position:relative;}
+.kegiatan-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:var(--shadow-md);}
+.kegiatan-card h3{font-size:1rem;color:var(--text);margin-bottom:4px;padding-right:30px;}
+.kegiatan-card .meta{font-size:.78rem;color:var(--muted);margin-bottom:12px;}
+.kegiatan-card .kstats{display:flex;gap:12px;flex-wrap:wrap;}
+.kegiatan-card .ks{font-size:.76rem;color:var(--muted-2);}
+.kegiatan-card .ks strong{color:var(--blue);font-family:'JetBrains Mono',monospace;}
+.kegiatan-card .card-actions{position:absolute;top:12px;right:12px;display:flex;gap:4px;}
+.kegiatan-add{background:var(--blue-lt);border:2px dashed var(--blue-md);border-radius:14px;padding:40px 24px;cursor:pointer;transition:all .2s;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
+.kegiatan-add:hover{border-color:var(--blue);background:var(--blue-md);}
+.kegiatan-add .icon{font-size:2rem;}
+.kegiatan-add p{font-size:.85rem;color:var(--blue);font-weight:600;}
+.kegiatan-bar{background:var(--blue-lt);border-bottom:1px solid var(--blue-md);padding:8px 32px;display:flex;align-items:center;gap:12px;font-size:.82rem;}
+.kegiatan-bar .kb-name{font-weight:700;color:var(--blue);}
+.kegiatan-bar .kb-meta{color:var(--muted);font-size:.76rem;}
+@media(max-width:768px){.app-header,.kegiatan-bar{padding-left:16px;padding-right:16px;}.tabs{padding:0 16px;}.main-content,#screen-kegiatan{padding:20px 16px;}.stats-grid{grid-template-columns:repeat(2,1fr);}.kegiatan-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="logo" onclick="goToKegiatanList()">BTAM <span>Sistem Penilaian</span></div>
+  <div class="header-actions">
+    <span id="fb-status" class="firebase-status disconnected" onclick="showFirebaseModal()"><span class="fb-dot"></span> Offline</span>
+    <button class="btn btn-ghost btn-sm" onclick="showFirebaseModal()">☁️ Firebase</button>
+  </div>
+</header>
+<div id="screen-kegiatan">
+  <div class="kegiatan-header"><h1>Sistem Penilaian Bimtek</h1><p>Pilih atau buat kegiatan bimbingan teknis untuk mulai penilaian.</p></div>
+  <div id="kegiatan-grid" class="kegiatan-grid"></div>
+</div>
+<div id="screen-detail" class="hidden">
+  <div class="kegiatan-bar">
+    <button class="btn btn-ghost btn-sm" onclick="goToKegiatanList()">← Kembali</button>
+    <span class="kb-name" id="kb-name"></span>
+    <span class="kb-meta" id="kb-meta"></span>
+  </div>
+  <div class="tabs">
+    <div class="tab active" id="tab-config" onclick="switchTab('config')">⚙️ Konfigurasi</div>
+    <div class="tab" id="tab-peserta" onclick="switchTab('peserta')">👥 Peserta <span class="tab-badge hidden" id="badge-peserta">0</span></div>
+    <div class="tab" id="tab-pengajar" onclick="switchTab('pengajar')">🎓 Pengajar</div>
+    <div class="tab" id="tab-penilaian" onclick="switchTab('penilaian')">📝 Input Nilai</div>
+    <div class="tab" id="tab-hasil" onclick="switchTab('hasil')">📊 Hasil</div>
+  </div>
+  <div class="main-content">
+    <div id="panel-config">
+      <h2 class="section-title">⚙️ Konfigurasi Bobot Penilaian</h2>
+      <div class="config-grid">
+        <div class="card">
+          <h3 style="font-size:.9rem;margin-bottom:16px;color:var(--text)">Bobot Nilai (%)</h3>
+          <div id="weight-list"></div>
+          <div id="weight-total" class="weight-total valid">Total: 100%</div>
+        </div>
+        <div class="card">
+          <h3 style="font-size:.9rem;margin-bottom:16px;color:var(--text)">Komponen Opsional</h3>
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div><div class="toggle-wrap"><div class="toggle on" id="toggle-tugas" onclick="toggleKomponen('tugas')"></div><span class="toggle-label">Nilai Tugas</span></div><p style="font-size:.76rem;color:var(--muted);margin-top:4px;margin-left:54px;">Jika nonaktif, bobot masuk ke Pengajar</p></div>
+            <div><div class="toggle-wrap"><div class="toggle on" id="toggle-presentasi" onclick="toggleKomponen('presentasi')"></div><span class="toggle-label">Nilai Presentasi Diskusi</span></div><p style="font-size:.76rem;color:var(--muted);margin-top:4px;margin-left:54px;">Jika nonaktif, bobot masuk ke Pengajar</p></div>
+          </div>
+          <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+            <h3 style="font-size:.9rem;margin-bottom:12px;color:var(--text)">Info Kegiatan</h3>
+            <div class="form-group"><label>Nama Kegiatan</label><input type="text" id="cfg-nama" onchange="saveKeg()"></div>
+            <div class="form-group"><label>Lokasi & Tanggal</label><input type="text" id="cfg-lokasi" onchange="saveKeg()"></div>
+            <div class="form-group"><label>Nilai Minimum Kelulusan</label><input type="number" id="cfg-kkm" value="60" min="0" max="100" onchange="saveKeg()"></div>
+            <div class="form-group"><label>Kode Ujian (Exam App)</label><input type="text" id="cfg-examcode" placeholder="Contoh: BTAM-2025" onchange="saveKeg()" style="text-transform:uppercase"><p style="font-size:.73rem;color:var(--muted);margin-top:4px">Isi kode ujian dari Sistem Ujian untuk sinkronisasi peserta & nilai otomatis.</p></div>
+          </div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="duplicateKegiatan()">📋 Duplikat</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteKegiatan()">🗑️ Hapus Kegiatan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="panel-peserta" class="hidden">
+      <h2 class="section-title">👥 Data Peserta</h2>
+      <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="showAddPesertaModal()">+ Tambah Peserta</button>
+        <button class="btn btn-outline" onclick="document.getElementById('import-peserta').click()">📁 Import Excel</button>
+        <input type="file" id="import-peserta" accept=".xlsx,.xls,.csv" style="display:none" onchange="importPeserta(event)">
+        <button class="btn btn-green" onclick="pullFromFirebase()">☁️ Tarik Peserta</button>
+        <button class="btn btn-primary" onclick="pullAndSyncFromFirebase()">⚡ Tarik & Sync Nilai</button>
+        <button class="btn btn-ghost" onclick="exportPeserta()">📥 Export</button>
+      </div>
+      <div id="peserta-table-wrap"></div>
+    </div>
+    <div id="panel-pengajar" class="hidden">
+      <h2 class="section-title">🎓 Daftar Pengajar</h2>
+      <div class="card" style="max-width:600px;">
+        <p style="font-size:.84rem;color:var(--muted);margin-bottom:16px;">Nilai dari setiap pengajar akan dirata-ratakan.</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="new-pengajar" placeholder="Nama pengajar..." style="flex:1" onkeydown="if(event.key==='Enter')addPengajar()">
+          <button class="btn btn-primary" onclick="addPengajar()">+ Tambah</button>
+        </div>
+        <div id="pengajar-list" class="instructor-list"></div>
+      </div>
+    </div>
+    <div id="panel-penilaian" class="hidden">
+      <h2 class="section-title">📝 Input Nilai Peserta</h2>
+      <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
+        <select id="nilai-kategori" onchange="renderNilaiTable()" style="width:auto;min-width:200px;">
+          <option value="pengajar">Nilai Pengajar</option>
+          <option value="kehadiran">Nilai Kehadiran</option>
+          <option value="keaktifan">Nilai Keaktifan</option>
+          <option value="respek">Nilai Respek</option>
+          <option value="tugas">Nilai Tugas</option>
+          <option value="presentasi">Nilai Presentasi Diskusi</option>
+          <option value="pretest">Pre Test (dari Ujian)</option>
+          <option value="posttest">Post Test (dari Ujian)</option>
+        </select>
+        <button class="btn btn-outline" onclick="document.getElementById('import-nilai').click()">📁 Import Nilai</button>
+        <input type="file" id="import-nilai" accept=".xlsx,.xls,.csv" style="display:none" onchange="importNilai(event)">
+        <button class="btn btn-green" onclick="syncExamScores()">☁️ Sync Ujian</button>
+      </div>
+      <div id="nilai-table-wrap"></div>
+    </div>
+    <div id="panel-hasil" class="hidden">
+      <h2 class="section-title">📊 Rekap Penilaian</h2>
+      <div class="stats-grid" id="hasil-stats"></div>
+      <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="exportHasil()">📥 Download Excel</button>
+        <input type="text" id="hasil-search" placeholder="Cari nama/instansi..." oninput="renderHasilTable()" style="width:auto;min-width:200px;">
+      </div>
+      <div id="hasil-table-wrap"></div>
+    </div>
+  </div>
+</div>
+<div id="modal-firebase" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal"><h2>☁️ Koneksi Firebase</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:16px;">Hubungkan ke Firebase project yang sama dengan Sistem Ujian untuk sinkronisasi data peserta &amp; nilai.</p>
+    <div class="form-group"><label>API Key</label><input type="text" id="fb-apiKey" autocomplete="off"></div>
+    <div class="form-group"><label>Auth Domain</label><input type="text" id="fb-authDomain" autocomplete="off" placeholder="project-id.firebaseapp.com"></div>
+    <div class="form-group"><label>Project ID</label><input type="text" id="fb-projectId" autocomplete="off"></div>
+    <div class="form-group"><label>Admin Email <span style="font-weight:400;color:var(--muted-2)">(opsional — jika Firestore butuh auth)</span></label><input type="email" id="fb-email" autocomplete="off"></div>
+    <div class="form-group"><label>Admin Password</label><input type="password" id="fb-password" autocomplete="new-password" placeholder="Kosongkan jika tidak pakai auth"></div>
+    <div id="fb-connect-status" style="font-size:.82rem;min-height:20px;margin-bottom:8px;"></div>
+    <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="fb-connect-btn" onclick="connectFirebase()">Hubungkan</button>
+      <button class="btn btn-danger" onclick="disconnectFirebase()">Putuskan</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-firebase')">Batal</button>
+    </div>
+  </div>
+</div>
+<div id="modal-kegiatan" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal"><h2 id="modal-keg-title">Buat Kegiatan Baru</h2>
+    <div class="form-group"><label>Nama Kegiatan</label><input type="text" id="mk-nama" placeholder="Pelayanan Pelanggan dan Pemasaran Kelas B"></div>
+    <div class="form-group"><label>Lokasi & Tanggal</label><input type="text" id="mk-lokasi" placeholder="Bekasi, 14-17 Juli 2025"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" onclick="createKegiatan()">Simpan</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-kegiatan')">Batal</button>
+    </div>
+  </div>
+</div>
+<div id="modal-peserta" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal"><h2 id="modal-peserta-title">Tambah Peserta</h2>
+    <input type="hidden" id="edit-peserta-idx" value="-1">
+    <div class="form-group"><label>No. Peserta / ID</label><input type="text" id="p-id"></div>
+    <div class="form-group"><label>Nama Lengkap</label><input type="text" id="p-nama"></div>
+    <div class="form-group"><label>Jabatan</label><input type="text" id="p-jabatan"></div>
+    <div class="form-group"><label>Instansi</label><input type="text" id="p-instansi"></div>
+    <div class="form-group"><label>Provinsi</label><input type="text" id="p-provinsi"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" onclick="savePeserta()">Simpan</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-peserta')">Batal</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+let db=null,toastTimer;
+const LABELS={pretest:'Pre Test',posttest:'Post Test',pengajar:'Pengajar',kehadiran:'Kehadiran',keaktifan:'Keaktifan',respek:'Respek',tugas:'Tugas',presentasi:'Presentasi Diskusi'};
+const ICONS={pretest:'📋',posttest:'📋',pengajar:'🎓',kehadiran:'📅',keaktifan:'💡',respek:'🤝',tugas:'📝',presentasi:'🎤'};
+const W_ORDER=['pretest','pengajar','kehadiran','keaktifan','respek','tugas','presentasi','posttest'];
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function defaultWeights(){return{pretest:15,pengajar:15,kehadiran:10,keaktifan:10,respek:5,tugas:10,presentasi:10,posttest:25};}
+function newKegiatan(nama,lokasi){return{id:genId(),nama:nama||'',lokasi:lokasi||'',examCode:'',kkm:60,weights:defaultWeights(),hasTugas:true,hasPresentasi:true,peserta:[],pengajar:['Pengajar 1'],scores:[]};}
+let store=loadStore(),activeId=null;
+function loadStore(){
+  try{const s=JSON.parse(localStorage.getItem('btam_penilaian_v2'));if(s&&s.kegiatanList)return s;}catch(e){}
+  try{const old=JSON.parse(localStorage.getItem('btam_penilaian'));if(old&&old.config){const k=newKegiatan(old.config.nama,old.config.lokasi);k.kkm=old.config.kkm||60;k.weights=old.config.weights||defaultWeights();k.hasTugas=old.config.hasTugas!==false;k.hasPresentasi=old.config.hasPresentasi!==false;k.peserta=old.peserta||[];k.pengajar=old.pengajar||['Pengajar 1'];k.scores=old.scores||[];return{firebaseCfg:old.firebase||null,kegiatanList:[k]};}}catch(e){}
+  return{firebaseCfg:null,kegiatanList:[]};
+}
+function saveStore(){localStorage.setItem('btam_penilaian_v2',JSON.stringify(store));}
+function getKeg(){return store.kegiatanList.find(k=>k.id===activeId)||null;}
+function saveKeg(){const k=getKeg();if(!k)return;k.nama=document.getElementById('cfg-nama').value;k.lokasi=document.getElementById('cfg-lokasi').value;k.kkm=parseInt(document.getElementById('cfg-kkm').value)||60;k.examCode=(document.getElementById('cfg-examcode').value||'').trim().toUpperCase();saveStore();updateKegBar();}
+function ensureScores(){const k=getKeg();if(!k)return;while(k.scores.length<k.peserta.length)k.scores.push({pretest:null,posttest:null,pengajar:{},kehadiran:null,keaktifan:null,respek:null,tugas:null,presentasi:null});}
+
+function goToKegiatanList(){activeId=null;document.getElementById('screen-kegiatan').classList.remove('hidden');document.getElementById('screen-detail').classList.add('hidden');renderKegiatanList();}
+function openKegiatan(id){activeId=id;document.getElementById('screen-kegiatan').classList.add('hidden');document.getElementById('screen-detail').classList.remove('hidden');updateKegBar();loadKegToUI();switchTab('config');}
+function updateKegBar(){const k=getKeg();if(!k)return;document.getElementById('kb-name').textContent=k.nama||'Kegiatan Tanpa Nama';document.getElementById('kb-meta').textContent=k.lokasi||'';}
+function switchTab(tab){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById('tab-'+tab).classList.add('active');['config','peserta','pengajar','penilaian','hasil'].forEach(p=>document.getElementById('panel-'+p).classList.toggle('hidden',p!==tab));if(tab==='peserta')renderPesertaTable();if(tab==='pengajar')renderPengajarList();if(tab==='penilaian')renderNilaiTable();if(tab==='hasil'){ensureScores();renderHasilStats();renderHasilTable();}}
+
+function renderKegiatanList(){
+  const g=document.getElementById('kegiatan-grid');
+  const cards=store.kegiatanList.map(k=>{
+    const np=k.peserta.length,ng=k.pengajar.length;
+    return`<div class="kegiatan-card" onclick="openKegiatan('${k.id}')"><div class="card-actions"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();confirmDeleteKegiatan('${k.id}')" title="Hapus">✕</button></div><h3>${k.nama||'Kegiatan Tanpa Nama'}</h3><div class="meta">${k.lokasi||'Lokasi belum diatur'}</div><div class="kstats"><span class="ks"><strong>${np}</strong> peserta</span><span class="ks"><strong>${ng}</strong> pengajar</span><span class="ks">KKM <strong>${k.kkm}</strong></span>${!k.hasTugas?'<span class="badge badge-amber" style="font-size:.6rem">Tanpa Tugas</span>':''}${!k.hasPresentasi?'<span class="badge badge-amber" style="font-size:.6rem">Tanpa Presentasi</span>':''}</div></div>`;
+  }).join('');
+  g.innerHTML=cards+`<div class="kegiatan-add" onclick="showNewKegiatanModal()"><div class="icon">+</div><p>Buat Kegiatan Baru</p></div>`;
+}
+function showNewKegiatanModal(){document.getElementById('mk-nama').value='';document.getElementById('mk-lokasi').value='';document.getElementById('modal-kegiatan').classList.remove('hidden');}
+function createKegiatan(){const nama=document.getElementById('mk-nama').value.trim(),lokasi=document.getElementById('mk-lokasi').value.trim();if(!nama){toast('Nama wajib diisi','error');return;}const k=newKegiatan(nama,lokasi);store.kegiatanList.push(k);saveStore();closeModal('modal-kegiatan');openKegiatan(k.id);toast('Kegiatan dibuat ✓','ok');}
+function duplicateKegiatan(){const src=getKeg();if(!src)return;const k=JSON.parse(JSON.stringify(src));k.id=genId();k.nama=src.nama+' (Copy)';store.kegiatanList.push(k);saveStore();toast('Kegiatan diduplikat ✓','ok');}
+function deleteKegiatan(){const k=getKeg();if(!k)return;if(!confirm('Hapus kegiatan "'+k.nama+'"? Semua data akan hilang.'))return;store.kegiatanList=store.kegiatanList.filter(x=>x.id!==k.id);saveStore();goToKegiatanList();toast('Kegiatan dihapus ✓','ok');}
+function confirmDeleteKegiatan(id){const k=store.kegiatanList.find(x=>x.id===id);if(!k)return;if(!confirm('Hapus "'+k.nama+'"?'))return;store.kegiatanList=store.kegiatanList.filter(x=>x.id!==id);saveStore();renderKegiatanList();toast('Dihapus ✓','ok');}
+
+function loadKegToUI(){const k=getKeg();if(!k)return;document.getElementById('cfg-nama').value=k.nama||'';document.getElementById('cfg-lokasi').value=k.lokasi||'';document.getElementById('cfg-kkm').value=k.kkm||60;document.getElementById('cfg-examcode').value=k.examCode||'';document.getElementById('toggle-tugas').classList.toggle('on',k.hasTugas);document.getElementById('toggle-presentasi').classList.toggle('on',k.hasPresentasi);renderWeights();updatePesertaBadge();}
+
+function renderWeights(){const k=getKeg();if(!k)return;document.getElementById('weight-list').innerHTML=W_ORDER.map(key=>{const dis=(key==='tugas'&&!k.hasTugas)||(key==='presentasi'&&!k.hasPresentasi);return`<div class="weight-item ${dis?'disabled':''}"><span style="font-size:1.1rem">${ICONS[key]}</span><span class="w-label">${LABELS[key]}</span><input type="number" class="w-input" value="${k.weights[key]}" min="0" max="100" ${dis?'disabled':''} onchange="updWeight('${key}',this.value)"><span style="font-size:.82rem;color:var(--muted)">%</span></div>`;}).join('');updWeightTotal();}
+function updWeight(key,val){const k=getKeg();if(!k)return;k.weights[key]=parseInt(val)||0;updWeightTotal();saveStore();}
+function updWeightTotal(){const k=getKeg();if(!k)return;const total=W_ORDER.reduce((s,key)=>{if(key==='tugas'&&!k.hasTugas)return s;if(key==='presentasi'&&!k.hasPresentasi)return s;return s+(k.weights[key]||0);},0);const el=document.getElementById('weight-total');el.textContent='Total: '+total+'%';el.className='weight-total '+(total===100?'valid':'invalid');}
+function toggleKomponen(type){const k=getKeg();if(!k)return;const tog=document.getElementById('toggle-'+type);if(type==='tugas'){k.hasTugas=!k.hasTugas;tog.classList.toggle('on',k.hasTugas);if(!k.hasTugas){k.weights.pengajar+=k.weights.tugas;k.weights.tugas=0;}}else{k.hasPresentasi=!k.hasPresentasi;tog.classList.toggle('on',k.hasPresentasi);if(!k.hasPresentasi){k.weights.pengajar+=k.weights.presentasi;k.weights.presentasi=0;}}renderWeights();saveStore();}
+
+function updatePesertaBadge(){const k=getKeg();if(!k)return;const b=document.getElementById('badge-peserta');b.textContent=k.peserta.length;b.classList.toggle('hidden',k.peserta.length===0);}
+function renderPesertaTable(){const k=getKeg();if(!k)return;updatePesertaBadge();if(k.peserta.length===0){document.getElementById('peserta-table-wrap').innerHTML='<div class="empty-state"><div class="icon">👥</div><p>Belum ada peserta. Tambah manual atau import Excel.</p></div>';return;}const rows=k.peserta.map((p,i)=>'<tr><td style="font-family:\'JetBrains Mono\',monospace">'+p.id+'</td><td style="font-weight:500">'+p.nama+'</td><td style="font-size:.8rem;color:var(--muted)">'+(p.jabatan||'—')+'</td><td style="font-size:.8rem;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(p.instansi||'')+'">'+(p.instansi||'—')+'</td><td>'+(p.provinsi?'<span class="badge badge-blue">'+p.provinsi+'</span>':'—')+'</td><td><button class="btn btn-ghost btn-sm" onclick="editPeserta('+i+')">✏️</button><button class="btn btn-danger btn-sm" onclick="deletePeserta('+i+')" style="padding:4px 8px">✕</button></td></tr>').join('');document.getElementById('peserta-table-wrap').innerHTML='<div class="table-wrap"><table class="data-table"><thead><tr><th>No.</th><th>Nama</th><th>Jabatan</th><th>Instansi</th><th>Provinsi</th><th>Aksi</th></tr></thead><tbody>'+rows+'</tbody></table></div>';}
+function showAddPesertaModal(){document.getElementById('modal-peserta-title').textContent='Tambah Peserta';document.getElementById('edit-peserta-idx').value=-1;['p-id','p-nama','p-jabatan','p-instansi','p-provinsi'].forEach(id=>document.getElementById(id).value='');const k=getKeg();document.getElementById('p-id').value=String((k?k.peserta.length:0)+1).padStart(3,'0');document.getElementById('modal-peserta').classList.remove('hidden');}
+function editPeserta(idx){const k=getKeg();if(!k)return;const p=k.peserta[idx];document.getElementById('modal-peserta-title').textContent='Edit Peserta';document.getElementById('edit-peserta-idx').value=idx;document.getElementById('p-id').value=p.id;document.getElementById('p-nama').value=p.nama;document.getElementById('p-jabatan').value=p.jabatan||'';document.getElementById('p-instansi').value=p.instansi||'';document.getElementById('p-provinsi').value=p.provinsi||'';document.getElementById('modal-peserta').classList.remove('hidden');}
+function savePeserta(){const k=getKeg();if(!k)return;const idx=parseInt(document.getElementById('edit-peserta-idx').value);const p={id:document.getElementById('p-id').value.trim(),nama:document.getElementById('p-nama').value.trim(),jabatan:document.getElementById('p-jabatan').value.trim(),instansi:document.getElementById('p-instansi').value.trim(),provinsi:document.getElementById('p-provinsi').value.trim()};if(!p.id||!p.nama){toast('ID dan Nama wajib','error');return;}if(idx>=0)k.peserta[idx]=p;else{k.peserta.push(p);ensureScores();}saveStore();renderPesertaTable();closeModal('modal-peserta');toast(idx>=0?'Diperbarui ✓':'Ditambahkan ✓','ok');}
+function deletePeserta(idx){const k=getKeg();if(!k)return;if(!confirm('Hapus "'+k.peserta[idx].nama+'"?'))return;k.peserta.splice(idx,1);k.scores.splice(idx,1);saveStore();renderPesertaTable();toast('Dihapus ✓','ok');}
+function importPeserta(event){const file=event.target.files[0];if(!file)return;const k=getKeg();if(!k)return;const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});let hIdx=-1,colMap={};for(let i=0;i<Math.min(15,data.length);i++){const row=data[i].map(c=>String(c).toLowerCase().trim());const nc=row.findIndex(c=>c.includes('nama'));if(nc>=0){hIdx=i;row.forEach((c,j)=>{if(c.includes('no')&&!c.includes('nama'))colMap.id=j;if(c.includes('nama'))colMap.nama=j;if(c.includes('jabatan'))colMap.jabatan=j;if(c.includes('instansi'))colMap.instansi=j;if(c.includes('provinsi'))colMap.provinsi=j;});break;}}if(hIdx<0){toast('Header "Nama" tidak ditemukan','error');return;}let count=0;for(let i=hIdx+1;i<data.length;i++){const row=data[i];const nama=String(row[colMap.nama]||'').trim();if(!nama)continue;if(k.peserta.find(p=>p.nama.toLowerCase()===nama.toLowerCase()))continue;k.peserta.push({id:colMap.id!==undefined?String(row[colMap.id]||'').trim():String(k.peserta.length+1).padStart(3,'0'),nama,jabatan:colMap.jabatan!==undefined?String(row[colMap.jabatan]||'').trim():'',instansi:colMap.instansi!==undefined?String(row[colMap.instansi]||'').trim():'',provinsi:colMap.provinsi!==undefined?String(row[colMap.provinsi]||'').trim():''});count++;}ensureScores();saveStore();renderPesertaTable();toast(count+' peserta diimport ✓','ok');}catch(err){toast('Gagal: '+err.message,'error');}};reader.readAsArrayBuffer(file);event.target.value='';}
+function exportPeserta(){const k=getKeg();if(!k||k.peserta.length===0){toast('Tidak ada data','error');return;}const ws=XLSX.utils.aoa_to_sheet([['No','Nama','Jabatan','Instansi','Provinsi'],...k.peserta.map(p=>[p.id,p.nama,p.jabatan,p.instansi,p.provinsi])]);ws['!cols']=[8,28,24,40,18].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Peserta');XLSX.writeFile(wb,'Peserta_Bimtek.xlsx');toast('Download ✓','ok');}
+
+function renderPengajarList(){const k=getKeg();if(!k)return;const el=document.getElementById('pengajar-list');if(k.pengajar.length===0){el.innerHTML='<p style="font-size:.84rem;color:var(--muted)">Belum ada pengajar.</p>';return;}el.innerHTML=k.pengajar.map((p,i)=>'<div class="instructor-item"><span style="font-family:\'JetBrains Mono\',monospace;font-size:.78rem;color:var(--blue);min-width:24px">'+(i+1)+'</span><input type="text" value="'+p+'" onchange="renamePengajar('+i+',this.value)" style="flex:1"><button class="btn btn-danger btn-sm" onclick="removePengajar('+i+')">✕</button></div>').join('');}
+function addPengajar(){const k=getKeg();if(!k)return;const input=document.getElementById('new-pengajar');const name=input.value.trim();if(!name)return;k.pengajar.push(name);input.value='';saveStore();renderPengajarList();toast('Ditambahkan ✓','ok');}
+function renamePengajar(idx,name){const k=getKeg();if(!k)return;const old=k.pengajar[idx];k.pengajar[idx]=name.trim();k.scores.forEach(s=>{if(s.pengajar&&s.pengajar[old]!==undefined){s.pengajar[name.trim()]=s.pengajar[old];delete s.pengajar[old];}});saveStore();}
+function removePengajar(idx){const k=getKeg();if(!k)return;if(!confirm('Hapus "'+k.pengajar[idx]+'"?'))return;const name=k.pengajar[idx];k.pengajar.splice(idx,1);k.scores.forEach(s=>{if(s.pengajar)delete s.pengajar[name];});saveStore();renderPengajarList();toast('Dihapus ✓','ok');}
+
+function renderNilaiTable(){const k=getKeg();if(!k)return;ensureScores();const cat=document.getElementById('nilai-kategori').value;const tugasOpt=document.querySelector('#nilai-kategori option[value="tugas"]'),presOpt=document.querySelector('#nilai-kategori option[value="presentasi"]');if(tugasOpt)tugasOpt.disabled=!k.hasTugas;if(presOpt)presOpt.disabled=!k.hasPresentasi;if(k.peserta.length===0){document.getElementById('nilai-table-wrap').innerHTML='<div class="empty-state"><div class="icon">📝</div><p>Tambahkan peserta terlebih dahulu.</p></div>';return;}if(cat==='pengajar')document.getElementById('nilai-table-wrap').innerHTML=buildPgTable();else if(cat==='pretest'||cat==='posttest')document.getElementById('nilai-table-wrap').innerHTML=buildExamTable(cat);else document.getElementById('nilai-table-wrap').innerHTML=buildSimpleTable(cat);}
+function buildPgTable(){const k=getKeg();if(k.pengajar.length===0)return'<div class="empty-state"><div class="icon">🎓</div><p>Tambahkan pengajar dulu.</p></div>';const ths=['No.','Nama',...k.pengajar,'Rata-rata'].map(h=>'<th>'+h+'</th>').join('');const rows=k.peserta.map((p,i)=>{const s=k.scores[i];const cells=k.pengajar.map(pn=>{const v=(s.pengajar&&s.pengajar[pn]!=null)?s.pengajar[pn]:'';return'<td><input type="number" min="0" max="100" value="'+v+'" onchange="setPgScore('+i+',\''+pn.replace(/'/g,"\\'")+'\',this.value)" placeholder="—"></td>';}).join('');const avg=calcPgAvg(i);const cls=avg>=80?'score-high':avg>=60?'score-mid':avg!=null?'score-low':'';return'<tr><td style="font-family:\'JetBrains Mono\',monospace">'+p.id+'</td><td style="font-weight:500">'+p.nama+'</td>'+cells+'<td>'+(avg!=null?'<span class="score-chip '+cls+'">'+avg+'</span>':'<span style="color:var(--muted-2)">—</span>')+'</td></tr>';}).join('');return'<div class="table-wrap"><table class="data-table"><thead><tr>'+ths+'</tr></thead><tbody>'+rows+'</tbody></table></div><div style="margin-top:12px"><button class="btn btn-ghost btn-sm" onclick="fillAll(\'pengajar\')">📋 Isi Semua Kosong</button></div>';}
+function buildSimpleTable(cat){const k=getKeg();const label=LABELS[cat];const rows=k.peserta.map((p,i)=>{const v=k.scores[i][cat];const dv=v!=null?v:'';return'<tr><td style="font-family:\'JetBrains Mono\',monospace">'+p.id+'</td><td style="font-weight:500">'+p.nama+'</td><td style="font-size:.8rem;color:var(--muted)">'+(p.instansi||'—')+'</td><td><input type="number" min="0" max="100" value="'+dv+'" onchange="setScore('+i+',\''+cat+'\',this.value)" placeholder="—"></td></tr>';}).join('');return'<div class="table-wrap"><table class="data-table"><thead><tr><th>No.</th><th>Nama</th><th>Instansi</th><th>'+label+'</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="margin-top:12px"><button class="btn btn-ghost btn-sm" onclick="fillAll(\''+cat+'\')">📋 Isi Semua Kosong</button></div>';}
+function buildExamTable(type){const k=getKeg();const label=type==='pretest'?'Pre Test':'Post Test';const rows=k.peserta.map((p,i)=>{const v=k.scores[i][type];const dv=v!=null?v:'';const src=k.scores[i][type+'_src']||'manual';const srcB=src==='firebase'?'<span class="badge badge-green" style="font-size:.6rem;margin-left:4px">☁️</span>':src==='excel'?'<span class="badge badge-amber" style="font-size:.6rem;margin-left:4px">📁</span>':'';return'<tr><td style="font-family:\'JetBrains Mono\',monospace">'+p.id+'</td><td style="font-weight:500">'+p.nama+' '+srcB+'</td><td style="font-size:.8rem;color:var(--muted)">'+(p.instansi||'—')+'</td><td><input type="number" min="0" max="100" value="'+dv+'" onchange="setScore('+i+',\''+type+'\',this.value)" placeholder="—"></td></tr>';}).join('');return'<div style="padding:12px 16px;background:var(--blue-lt);border:1px solid var(--blue-md);border-radius:var(--radius);margin-bottom:12px;font-size:.82rem;color:var(--blue)">💡 Nilai '+label+' bisa di-sync dari Firebase, import Excel, atau isi manual.</div><div class="table-wrap"><table class="data-table"><thead><tr><th>No.</th><th>Nama</th><th>Instansi</th><th>'+label+'</th></tr></thead><tbody>'+rows+'</tbody></table></div>';}
+function setScore(idx,key,val){const k=getKeg();if(!k)return;ensureScores();k.scores[idx][key]=val===''?null:parseFloat(val);saveStore();}
+function setPgScore(idx,pn,val){const k=getKeg();if(!k)return;ensureScores();if(!k.scores[idx].pengajar)k.scores[idx].pengajar={};k.scores[idx].pengajar[pn]=val===''?null:parseFloat(val);saveStore();renderNilaiTable();}
+function calcPgAvg(idx){const k=getKeg();if(!k)return null;const s=k.scores[idx];if(!s||!s.pengajar)return null;const vals=k.pengajar.map(pn=>s.pengajar[pn]).filter(v=>v!=null&&!isNaN(v));if(!vals.length)return null;return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*100)/100;}
+function fillAll(cat){const k=getKeg();if(!k)return;const val=prompt('Masukkan nilai default (0-100):');if(val===null)return;const num=parseFloat(val);if(isNaN(num)||num<0||num>100){toast('Nilai harus 0-100','error');return;}ensureScores();if(cat==='pengajar'){k.peserta.forEach((_,i)=>{if(!k.scores[i].pengajar)k.scores[i].pengajar={};k.pengajar.forEach(pn=>{if(k.scores[i].pengajar[pn]==null)k.scores[i].pengajar[pn]=num;});});}else{k.peserta.forEach((_,i)=>{if(k.scores[i][cat]==null)k.scores[i][cat]=num;});}saveStore();renderNilaiTable();toast('Diterapkan ✓','ok');}
+function importNilai(event){const file=event.target.files[0];if(!file)return;const k=getKeg();if(!k)return;const cat=document.getElementById('nilai-kategori').value;const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});let hIdx=-1,namaCol=-1,scoreCol=-1,idCol=-1;const target=LABELS[cat]||cat;for(let i=0;i<Math.min(15,data.length);i++){const row=data[i].map(c=>String(c).toLowerCase().trim());const nc=row.findIndex(c=>c.includes('nama'));if(nc>=0){hIdx=i;namaCol=nc;idCol=row.findIndex(c=>c==='no'||c==='no.'||c.includes('no. peserta'));scoreCol=row.findIndex(c=>c.includes(target.toLowerCase())||c.includes(cat));if(scoreCol<0&&cat==='pretest')scoreCol=row.findIndex(c=>c.includes('pre'));if(scoreCol<0&&cat==='posttest')scoreCol=row.findIndex(c=>c.includes('post'));if(scoreCol<0){for(let j=nc+1;j<row.length;j++){if(data[i+1]&&typeof data[i+1][j]==='number'){scoreCol=j;break;}}}break;}}if(hIdx<0||namaCol<0){toast('Format tidak dikenali','error');return;}if(scoreCol<0){toast('Kolom "'+target+'" tidak ditemukan','error');return;}ensureScores();let matched=0;for(let i=hIdx+1;i<data.length;i++){const row=data[i];const nama=String(row[namaCol]||'').trim().toLowerCase();const id=idCol>=0?String(row[idCol]||'').trim():'';const val=parseFloat(row[scoreCol]);if(!nama||isNaN(val))continue;const pIdx=k.peserta.findIndex(p=>p.nama.toLowerCase()===nama||(id&&p.id===id));if(pIdx>=0){if(cat==='pengajar'){if(!k.scores[pIdx].pengajar)k.scores[pIdx].pengajar={};k.scores[pIdx].pengajar[k.pengajar[0]||'Pengajar 1']=val;}else{k.scores[pIdx][cat]=val;if(cat==='pretest'||cat==='posttest')k.scores[pIdx][cat+'_src']='excel';}matched++;}}saveStore();renderNilaiTable();toast(matched+' nilai diimport ✓','ok');}catch(err){toast('Gagal: '+err.message,'error');}};reader.readAsArrayBuffer(file);event.target.value='';}
+
+function showFirebaseModal(){
+  const s=document.getElementById('fb-connect-status');if(s)s.textContent='';
+  if(store.firebaseCfg){
+    document.getElementById('fb-apiKey').value=store.firebaseCfg.apiKey||'';
+    document.getElementById('fb-authDomain').value=store.firebaseCfg.authDomain||'';
+    document.getElementById('fb-projectId').value=store.firebaseCfg.projectId||'';
+    document.getElementById('fb-email').value=store.firebaseCfg.email||'';
+    const pwdField=document.getElementById('fb-password');
+    pwdField.value='';
+    pwdField.placeholder=store.firebaseCfg._pwd?'(tersimpan — kosongkan untuk pakai yang sama)':'Kosongkan jika tidak pakai auth';
+  }
+  document.getElementById('modal-firebase').classList.remove('hidden');
+}
+async function connectFirebase(){
+  const cfg={apiKey:document.getElementById('fb-apiKey').value.trim(),authDomain:document.getElementById('fb-authDomain').value.trim(),projectId:document.getElementById('fb-projectId').value.trim()};
+  const email=document.getElementById('fb-email').value.trim();
+  const pwdInput=document.getElementById('fb-password').value;
+  const password=pwdInput||(store.firebaseCfg&&store.firebaseCfg._pwd?atob(store.firebaseCfg._pwd):'');
+  if(!cfg.apiKey||!cfg.projectId){toast('API Key dan Project ID wajib','error');return;}
+  const statusEl=document.getElementById('fb-connect-status');
+  const btn=document.getElementById('fb-connect-btn');
+  const setStatus=(msg,color)=>{if(statusEl){statusEl.textContent=msg;statusEl.style.color=color||'var(--muted)';}};
+  btn.disabled=true;btn.textContent='⏳ Menghubungkan...';
+  try{
+    if(firebase.apps.length){try{await firebase.app().delete();}catch(_){}}
+    firebase.initializeApp(cfg);
+    db=firebase.firestore();
+    setStatus('⏳ Menguji koneksi Firestore…');
+    let authOk=false;
+    // Coba tanpa auth dulu
+    try{await db.collection('se_results').limit(1).get();authOk=true;}
+    catch(pingErr){
+      // Jika permission denied, coba dengan auth
+      if(pingErr.message&&(pingErr.message.includes('permission')||pingErr.message.includes('PERMISSION_DENIED')||pingErr.message.includes('Missing')||pingErr.message.includes('unauthenticated'))){
+        if(email&&password){
+          setStatus('⏳ Login dengan akun admin…');
+          await firebase.auth().signInWithEmailAndPassword(email,password);
+          await db.collection('se_results').limit(1).get();
+          authOk=true;
+        } else {
+          throw new Error('Firestore membutuhkan autentikasi. Isi Admin Email & Password.');
+        }
+      } else {throw pingErr;}
+    }
+    // Auth tambahan jika belum login dan kredensial tersedia
+    if(!firebase.auth().currentUser&&email&&password){
+      try{await firebase.auth().signInWithEmailAndPassword(email,password);}catch(_){}
+    }
+    store.firebaseCfg={...cfg,email,_pwd:password?btoa(password):''};
+    saveStore();updateFbStatus(true);closeModal('modal-firebase');
+    toast('Terhubung ke Firebase ✓','ok');
+  }catch(e){
+    db=null;
+    setStatus('❌ '+e.message,'var(--red)');
+    updateFbStatus(false);
+    toast('Gagal: '+e.message,'error');
+  }finally{btn.disabled=false;btn.textContent='Hubungkan';}
+}
+function disconnectFirebase(){db=null;store.firebaseCfg=null;if(firebase.apps.length)firebase.app().delete().catch(()=>{});saveStore();updateFbStatus(false);closeModal('modal-firebase');toast('Koneksi diputus','ok');}
+function updateFbStatus(on){const el=document.getElementById('fb-status');el.className='firebase-status '+(on?'connected':'disconnected');el.innerHTML='<span class="fb-dot"></span> '+(on?'Connected':'Offline');}
+async function tryAutoConnect(){
+  if(!store.firebaseCfg||!store.firebaseCfg.apiKey)return;
+  try{
+    if(!firebase.apps.length)firebase.initializeApp(store.firebaseCfg);
+    db=firebase.firestore();
+    // Coba re-auth jika password tersimpan
+    const{email,_pwd}=store.firebaseCfg;
+    if(email&&_pwd&&!firebase.auth().currentUser){
+      try{await firebase.auth().signInWithEmailAndPassword(email,atob(_pwd));}catch(_){}
+    }
+    // Ping Firestore — ini yang menentukan status koneksi, bukan auth state
+    await db.collection('se_results').limit(1).get();
+    updateFbStatus(true);
+  }catch(e){
+    // Jika permission error tapi db ada, mungkin rule butuh auth yang sudah expired
+    if(e.message&&(e.message.includes('permission')||e.message.includes('PERMISSION_DENIED'))){
+      // db masih hidup, coba tandai connecting agar user tahu perlu re-auth
+      updateFbStatus(false);
+    } else {
+      db=null;updateFbStatus(false);
+    }
+  }
+}
+async function syncExamScores(){if(!db){toast('Firebase belum terhubung','error');return;}const k=getKeg();if(!k)return;const examCode=(k.examCode||'').trim().toUpperCase();try{let q=db.collection('se_results');if(examCode)q=q.where('examCode','==',examCode);const snap=await q.get();if(snap.empty){toast('Tidak ada data ujian'+(examCode?' untuk kode '+examCode:''),'error');return;}ensureScores();let matched=0;snap.docs.forEach(doc=>{const r=doc.data();if(r._deleted)return;const rName=(r.name||'').trim().toLowerCase();const rId=(r.id||'').trim().toLowerCase();const pIdx=k.peserta.findIndex(p=>p.id.toLowerCase()===rId||(rName&&p.nama.toLowerCase()===rName));if(pIdx<0)return;const type=r.examType==='pretest'?'pretest':r.examType==='posttest'?'posttest':null;if(!type)return;k.scores[pIdx][type]=r.score;k.scores[pIdx][type+'_src']='firebase';matched++;});saveStore();renderNilaiTable();toast(matched+' nilai di-sync ✓'+(examCode?' ('+examCode+')'):'','ok');}catch(e){toast('Gagal: '+e.message,'error');}}
+async function pullFromFirebase(){if(!db){toast('Firebase belum terhubung','error');return;}const k=getKeg();if(!k)return;const examCode=(k.examCode||'').trim().toUpperCase();try{let added=0;const existNames=new Set(k.peserta.map(p=>p.nama.toLowerCase()));const existIds=new Set(k.peserta.map(p=>p.id.toLowerCase()));
+if(examCode){try{const examSnap=await db.collection('se_exams').where('code','==',examCode).limit(1).get();if(!examSnap.empty){const examDocRef=examSnap.docs[0];const examId=examDocRef.data().id||examDocRef.id;const pSnap=await db.collection('se_participants').doc(examId).get();if(pSnap.exists){const list=pSnap.data().list||[];list.forEach(p=>{const nama=(p.nama||'').trim(),id=(p.noPeserta||'').trim();if(!nama)return;if(existNames.has(nama.toLowerCase())||existIds.has(id.toLowerCase()))return;existNames.add(nama.toLowerCase());if(id)existIds.add(id.toLowerCase());k.peserta.push({id:id||String(k.peserta.length+1).padStart(3,'0'),nama,jabatan:'',instansi:(p.instansi||'').trim(),provinsi:(p.provinsi||p.kabKota||'').trim()});added++;});ensureScores();saveStore();renderPesertaTable();toast(added+' peserta ditarik dari whitelist ujian ✓','ok');return;}}}catch(eInner){console.warn('se_participants error:',eInner);}}
+let q=db.collection('se_results');if(examCode)q=q.where('examCode','==',examCode);const snap=await q.get();if(snap.empty){toast('Tidak ada data peserta'+(examCode?' untuk kode '+examCode:''),'error');return;}const seen=new Set();snap.docs.forEach(doc=>{const r=doc.data();if(r._deleted)return;const nama=(r.name||'').trim(),id=(r.id||'').trim();if(!nama||seen.has(nama.toLowerCase()))return;seen.add(nama.toLowerCase());if(existNames.has(nama.toLowerCase())||existIds.has(id.toLowerCase()))return;k.peserta.push({id:id||String(k.peserta.length+1).padStart(3,'0'),nama,jabatan:'',instansi:(r.instansi||'').trim(),provinsi:''});added++;});ensureScores();saveStore();renderPesertaTable();toast(added+' peserta ditarik dari hasil ujian ✓','ok');}catch(e){toast('Gagal: '+e.message,'error');}}
+async function pullAndSyncFromFirebase(){if(!db){toast('Firebase belum terhubung','error');return;}const k=getKeg();if(!k)return;toast('Menarik peserta & nilai...','');await pullFromFirebase();await syncExamScores();}
+
+function calcFinal(idx){const k=getKeg();if(!k)return null;const s=k.scores[idx];if(!s)return null;const w={...k.weights};if(!k.hasTugas){w.pengajar+=w.tugas;w.tugas=0;}if(!k.hasPresentasi){w.pengajar+=w.presentasi;w.presentasi=0;}const pgAvg=calcPgAvg(idx);const comp={pretest:s.pretest,posttest:s.posttest,pengajar:pgAvg,kehadiran:s.kehadiran,keaktifan:s.keaktifan,respek:s.respek,tugas:k.hasTugas?s.tugas:null,presentasi:k.hasPresentasi?s.presentasi:null};let total=0,tw=0;Object.entries(w).forEach(([key,wt])=>{if(wt>0&&comp[key]!=null){total+=comp[key]*wt/100;tw+=wt;}});if(tw===0)return null;return Math.round(total*(100/tw)*100)/100;}
+
+function renderHasilStats(){const k=getKeg();if(!k)return;ensureScores();const totals=k.peserta.map((_,i)=>calcFinal(i)).filter(v=>v!=null);const avg=totals.length?Math.round(totals.reduce((a,b)=>a+b,0)/totals.length*100)/100:0;const mn=totals.length?Math.min(...totals):0,mx=totals.length?Math.max(...totals):0;const lulus=totals.filter(v=>v>=k.kkm).length,gagal=totals.filter(v=>v<k.kkm).length;document.getElementById('hasil-stats').innerHTML='<div class="stat-card"><span class="stat-val">'+k.peserta.length+'</span><span class="stat-lbl">Total Peserta</span></div><div class="stat-card"><span class="stat-val" style="color:var(--blue)">'+avg+'</span><span class="stat-lbl">Rata-rata</span><span class="stat-sub">Min '+mn+' — Maks '+mx+'</span></div><div class="stat-card"><span class="stat-val" style="color:var(--green)">'+lulus+'</span><span class="stat-lbl">Lulus (≥'+k.kkm+')</span></div><div class="stat-card"><span class="stat-val" style="color:var(--red)">'+gagal+'</span><span class="stat-lbl">Tidak Lulus</span></div>';}
+function renderHasilTable(){const k=getKeg();if(!k)return;ensureScores();const search=(document.getElementById('hasil-search')?.value||'').toLowerCase();if(k.peserta.length===0){document.getElementById('hasil-table-wrap').innerHTML='<div class="empty-state"><div class="icon">📊</div><p>Belum ada data.</p></div>';return;}const activeKeys=['pretest','pengajar','kehadiran','keaktifan','respek'];if(k.hasTugas)activeKeys.push('tugas');if(k.hasPresentasi)activeKeys.push('presentasi');activeKeys.push('posttest');const ew={...k.weights};if(!k.hasTugas){ew.pengajar+=ew.tugas;ew.tugas=0;}if(!k.hasPresentasi){ew.pengajar+=ew.presentasi;ew.presentasi=0;}const ths=['No.','Nama','Instansi',...activeKeys.map(key=>LABELS[key]+' ('+ew[key]+'%)'),'Total','Status'].map(h=>'<th style="text-align:center">'+h+'</th>').join('');let list=k.peserta.map((p,i)=>({...p,idx:i}));if(search)list=list.filter(p=>p.nama.toLowerCase().includes(search)||(p.instansi||'').toLowerCase().includes(search));const rows=list.map(p=>{const i=p.idx;const s=k.scores[i]||{};const vals=activeKeys.map(key=>{let v=key==='pengajar'?calcPgAvg(i):s[key];if(v==null)return'<td style="text-align:center;color:var(--muted-2)">—</td>';return'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:.8rem">'+v+'</td>';}).join('');const total=calcFinal(i);const tc=total>=80?'score-high':total>=k.kkm?'score-mid':total!=null?'score-low':'';const status=total==null?'<span style="color:var(--muted-2)">—</span>':total>=k.kkm?'<span class="badge badge-green">LULUS</span>':'<span class="badge badge-red">TIDAK LULUS</span>';return'<tr><td style="font-family:\'JetBrains Mono\',monospace">'+p.id+'</td><td style="font-weight:500;white-space:nowrap">'+p.nama+'</td><td style="font-size:.78rem;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(p.instansi||'')+'">'+(p.instansi||'—')+'</td>'+vals+'<td style="text-align:center">'+(total!=null?'<span class="score-chip '+tc+'">'+total+'</span>':'<span style="color:var(--muted-2)">—</span>')+'</td><td style="text-align:center">'+status+'</td></tr>';}).join('');document.getElementById('hasil-table-wrap').innerHTML='<div class="table-wrap"><table class="data-table"><thead><tr>'+ths+'</tr></thead><tbody>'+rows+'</tbody></table></div>';}
+
+function exportHasil(){const k=getKeg();if(!k||k.peserta.length===0){toast('Tidak ada data','error');return;}ensureScores();const wb=XLSX.utils.book_new();const ew={...k.weights};if(!k.hasTugas){ew.pengajar+=ew.tugas;ew.tugas=0;}if(!k.hasPresentasi){ew.pengajar+=ew.presentasi;ew.presentasi=0;}const activeKeys=['pretest','pengajar','kehadiran','keaktifan','respek'];if(k.hasTugas)activeKeys.push('tugas');if(k.hasPresentasi)activeKeys.push('presentasi');activeKeys.push('posttest');
+const t1=['','DAFTAR PESERTA BIMBINGAN TEKNIS'],t2=['',k.nama||''],t3=['',k.lokasi||''];const h1=['','No.','Nama','Jabatan','Instansi','Provinsi','NILAI'];const h2=['','','','','','',...activeKeys.map(key=>LABELS[key]+' ('+ew[key]+'%)'),'Total','Status'];const dRows=k.peserta.map((p,i)=>{const s=k.scores[i]||{};const pgAvg=calcPgAvg(i);const total=calcFinal(i);const status=total==null?'':total>=k.kkm?'LULUS':'TIDAK LULUS';const vals=activeKeys.map(key=>key==='pengajar'?pgAvg:s[key]);return['',p.id,p.nama,p.jabatan,p.instansi,p.provinsi,...vals,total,status];});const ws1=XLSX.utils.aoa_to_sheet([t1,t2,t3,[],[],[],[],h1,h2,...dRows]);ws1['!cols']=[3,8,28,24,40,18,...activeKeys.map(()=>14),10,14].map(w=>({wch:w}));ws1['!merges']=[{s:{r:0,c:1},e:{r:0,c:5}},{s:{r:1,c:1},e:{r:1,c:5}},{s:{r:2,c:1},e:{r:2,c:5}}];XLSX.utils.book_append_sheet(wb,ws1,'Rekap Nilai');
+if(k.pengajar.length>0){const pgH=['No.','Nama',...k.pengajar,'Rata-rata'];const pgR=k.peserta.map((p,i)=>{const s=k.scores[i]?.pengajar||{};return[p.id,p.nama,...k.pengajar.map(pn=>s[pn]??''),calcPgAvg(i)];});const ws2=XLSX.utils.aoa_to_sheet([pgH,...pgR]);ws2['!cols']=[8,28,...k.pengajar.map(()=>14),12].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws2,'Detail Pengajar');}
+const cH=['No.','Nama','Pre Test','Post Test','Selisih','% Peningkatan'];const cR=k.peserta.map((p,i)=>{const s=k.scores[i]||{};const d=(s.pretest!=null&&s.posttest!=null)?s.posttest-s.pretest:null;const pct=(s.pretest!=null&&s.posttest!=null&&s.pretest>0)?Math.round(d/s.pretest*100)+'%':'';return[p.id,p.nama,s.pretest,s.posttest,d,pct];});const ws3=XLSX.utils.aoa_to_sheet([cH,...cR]);ws3['!cols']=[8,28,12,12,12,16].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws3,'Perbandingan Pre-Post');
+const cfgD=[['Konfigurasi Penilaian'],[''],['Kegiatan: '+k.nama],['Lokasi: '+k.lokasi],['KKM: '+k.kkm],[''],['Komponen','Bobot (%)','Status'],...W_ORDER.map(key=>{const dis=(key==='tugas'&&!k.hasTugas)||(key==='presentasi'&&!k.hasPresentasi);return[LABELS[key],dis?0:k.weights[key],dis?'Nonaktif → Pengajar':'Aktif'];})];const ws4=XLSX.utils.aoa_to_sheet(cfgD);ws4['!cols']=[30,12,30].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws4,'Konfigurasi');
+XLSX.writeFile(wb,'Penilaian_'+(k.nama||'Bimtek').replace(/\s+/g,'_')+'.xlsx');toast('Download ✓','ok');}
+
+function toast(msg,type){const el=document.getElementById('toast');el.textContent=msg;el.className='show'+(type==='error'?' toast-error':type==='ok'?' toast-ok':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3000);}
+function closeModal(id){document.getElementById(id).classList.add('hidden');}
+(function init(){renderKegiatanList();tryAutoConnect();})();
+</script>
+</body>
+</html>
