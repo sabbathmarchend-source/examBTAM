@@ -4204,7 +4204,7 @@ correct adalah index 0-3 untuk pilihan ganda, -1 untuk essay.
 Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6) beserta deskripsinya, atau gunakan format Kompetensi Dasar (KD) jika relevan.`;
 
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const res = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
