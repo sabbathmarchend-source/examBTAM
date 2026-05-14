@@ -207,7 +207,7 @@
   }
 
   /* Questions list */
-  .q-list { display: flex; flex-direction: column; gap: 4px; }
+  .q-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
   .q-item {
     padding: 9px 12px; background: transparent; border-radius: var(--radius-sm);
     border: 1px solid transparent; cursor: pointer; transition: all 0.12s;
@@ -1702,6 +1702,7 @@
               <tr>
                 <th>No. Peserta</th>
                 <th>Nama</th>
+                <th>Jabatan</th>
                 <th>Instansi</th>
                 <th>Kab/Kota</th>
                 <th>Pre Test</th>
@@ -1944,6 +1945,15 @@
   <div class="modal">
     <h2>🤖 Generate Soal dengan AI</h2>
     <div class="form-group">
+      <label>Gemini API Key <a href="https://aistudio.google.com/apikey" target="_blank" style="font-size:0.78rem;color:var(--blue);font-weight:400">(Dapatkan gratis di Google AI Studio ↗)</a></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="password" id="ai-api-key" placeholder="AIza..." style="flex:1;font-family:'JetBrains Mono',monospace;font-size:0.82rem">
+        <button class="btn btn-ghost btn-sm" onclick="toggleAiKeyVisibility()" id="ai-key-toggle" title="Tampilkan/sembunyikan key">👁</button>
+        <button class="btn btn-ghost btn-sm" onclick="saveAiKey()" title="Simpan key">Simpan</button>
+      </div>
+      <div id="ai-key-status" style="font-size:0.76rem;margin-top:4px;color:var(--muted)"></div>
+    </div>
+    <div class="form-group">
       <label>Mata Pelajaran / Topik</label>
       <input type="text" id="ai-topic" placeholder="contoh: Pelayanan Pelanggan dan Pemasaran, Pengoperasian dan Pemeliharaan Pompa, Penyusunan Laporan Keuangan SAK EP">
     </div>
@@ -2049,8 +2059,8 @@
               <th style="width:36px">#</th>
               <th>No. Peserta</th>
               <th>Nama</th>
-              <th>Instansi</th>
               <th>Jabatan</th>
+              <th>Instansi</th>
               <th>Kab/Kota</th>
               <th>Provinsi</th>
               <th style="width:60px">Aksi</th>
@@ -2294,9 +2304,12 @@ service cloud.firestore {
       allow write:  if request.auth != null;
     }
 
-    // Percobaan ujian — semua perangkat
+    // Percobaan ujian — peserta boleh create & read, hanya admin yg boleh delete
     match /se_attempts/{doc} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read:   if true;
+      allow delete: if request.auth != null;
+      allow update: if false;
     }
 
     // Daftar peserta whitelist — semua boleh baca dan tulis
@@ -3515,10 +3528,15 @@ async function goAdmin() {
               // PENTING 2: pertahankan field `correct` per soal dari lokal
               // se_exams TIDAK menyimpan `correct` (keamanan) — hanya ada di localStorage
               const localQs = allExams[idx].questions || [];
-              const mergedQs = (ce.questions || []).map((cq, qi) => ({
-                ...cq,
-                correct: localQs[qi]?.correct !== undefined ? localQs[qi].correct : (cq.correct ?? 0)
-              }));
+              const mergedQs = (ce.questions || []).map((cq, qi) => {
+                // Cari by id (stable), fallback by index (backward compat soal lama tanpa id)
+                const localQ = cq.id
+                  ? (localQs.find(lq => lq.id === cq.id) || localQs[qi])
+                  : localQs[qi];
+                const correct = localQ && localQ.correct !== undefined ? localQ.correct : undefined;
+                if (correct === undefined) console.warn('[merge] soal qi=' + qi + ' id=' + (cq.id||'?') + ' tidak ditemukan di lokal');
+                return Object.assign({}, cq, correct !== undefined ? { correct: correct } : {});
+              });
               allExams[idx] = {
                 ...ce,
                 questions: mergedQs,
@@ -3814,6 +3832,7 @@ function addQuestion(data) {
     points: 10,
     kompetensi: ''
   };
+  if (!q.id) q.id = genId();
   questions.push(q);
   renderQList();
   editQuestion(questions.length - 1);
@@ -4115,12 +4134,37 @@ function exportExam() {
 // ══════════════════════════════════════════
 // AI GENERATE
 // ══════════════════════════════════════════
-function openAiGen() { document.getElementById('modal-ai').classList.remove('hidden'); }
+function openAiGen() {
+  document.getElementById('modal-ai').classList.remove('hidden');
+  const saved = localStorage.getItem('secureexam_gemini_key') || '';
+  const keyInp = document.getElementById('ai-api-key');
+  if (keyInp) keyInp.value = saved;
+  const keyStatus = document.getElementById('ai-key-status');
+  if (keyStatus) keyStatus.textContent = saved ? '✓ API key tersimpan' : 'Belum ada API key tersimpan.';
+}
+function saveAiKey() {
+  const val = document.getElementById('ai-api-key').value.trim();
+  if (!val) { toast('Isi API key terlebih dahulu!', 'error'); return; }
+  localStorage.setItem('secureexam_gemini_key', val);
+  document.getElementById('ai-key-status').textContent = '✓ API key tersimpan';
+  document.getElementById('ai-key-status').style.color = 'var(--green)';
+  toast('API key disimpan ✓', 'ok');
+}
+function toggleAiKeyVisibility() {
+  const inp = document.getElementById('ai-api-key');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
 
 async function generateAI() {
+  const apiKey = (document.getElementById('ai-api-key').value.trim()) || localStorage.getItem('secureexam_gemini_key') || '';
+  if (!apiKey) {
+    toast('Isi Gemini API key terlebih dahulu!', 'error');
+    document.getElementById('ai-api-key').focus();
+    return;
+  }
   const topic = document.getElementById('ai-topic').value.trim();
   if (!topic) { toast('Isi topik terlebih dahulu!', 'error'); return; }
-  
+
   const level = document.getElementById('ai-level').value;
   const mcCount = parseInt(document.getElementById('ai-mc-count').value)||5;
   const essayCount = parseInt(document.getElementById('ai-essay-count').value)||2;
@@ -4161,23 +4205,31 @@ correct adalah index 0-3 untuk pilihan ganda, -1 untuk essay.
 Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6) beserta deskripsinya, atau gunakan format Kompetensi Dasar (KD) jika relevan.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const res = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
       })
     });
     const data = await res.json();
-    const text = data.content.map(c => c.text || '').join('');
+    if (data.error) {
+      const msg = data.error.message || '';
+      const isQuota = data.error.status === 'RESOURCE_EXHAUSTED' || msg.toLowerCase().includes('quota');
+      if (isQuota) throw new Error('QUOTA_EXCEEDED');
+      throw new Error('Gemini API error: ' + msg);
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) throw new Error('Respons kosong dari Gemini');
     // Strip markdown fences if present
     const clean = text.replace(/```json|```/g,'').trim();
     const generated = JSON.parse(clean);
     if (!Array.isArray(generated)) throw new Error('Format tidak valid');
     
     generated.forEach(q => questions.push({
+      id: genId(),
       type: q.type || 'mc',
       text: q.text || '',
       image: q.image || '',
@@ -4191,7 +4243,11 @@ Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6)
     closeModal('modal-ai');
     toast(`${generated.length} soal berhasil di-generate! ✓`, 'ok');
   } catch(e) {
-    status.innerHTML = '❌ Gagal generate: ' + e.message;
+    if (e.message === 'QUOTA_EXCEEDED') {
+      status.innerHTML = '❌ Quota harian Gemini habis. Coba lagi besok atau cek batas pemakaian di <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a>.';
+    } else {
+      status.innerHTML = '❌ Gagal generate: ' + e.message;
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = '✨ Generate Soal';
@@ -4208,7 +4264,7 @@ function importJSON() {
     const data = JSON.parse(document.getElementById('import-json').value);
     if (Array.isArray(data)) {
       // Array of questions → add to current editor
-      data.forEach(q => questions.push(q));
+      data.forEach(q => { if (!q.id) q.id = genId(); questions.push(q); });
       renderQList(); updateAdminSummary();
     } else if (data.questions) {
       // Single exam config → import as new exam
@@ -4219,7 +4275,7 @@ function importJSON() {
         duration: data.duration || 60,
         maxWarnings: data.maxWarnings || 3,
         ac: data.ac || {},
-        questions: data.questions
+        questions: (data.questions || []).map(q => ({ ...q, id: q.id || genId() }))
       };
       // Ensure unique code
       let base = exam.code, n = 1;
@@ -4481,6 +4537,11 @@ async function startExam() {
   // Show exam type badge in topbar
   const typeLabel = selectedExamType === 'pretest' ? 'Pre Test' : 'Post Test';
   document.querySelector('.exam-topbar .logo').textContent = `🔒 Ujian Aman — ${typeLabel}`;
+
+  // Catat attempt SEBELUM ujian dimulai (bukan saat submit)
+  // Peserta lain dengan nopeserta sama akan diblokir di cloudCheckAttempt
+  recordAttempt(code, sid, selectedExamType);
+  cloudRecordAttempt(code, sid, selectedExamType);
 
   showScreen('exam');
   renderExam();
@@ -4871,10 +4932,8 @@ async function submitExam(timeUp=false, forceStop=false) {
   document.getElementById('warning-overlay').classList.add('hidden');
   if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
 
-  // Record attempt
+  // Attempt sudah dicatat di startExam() sebelum ujian dimulai
   const examType = studentInfo.examType || 'pretest';
-  recordAttempt(examConfig.code, studentInfo.id, examType);
-  cloudRecordAttempt(examConfig.code, studentInfo.id, examType);
 
   // Tampilkan layar hasil lebih awal — nilai menyusul
   const _showScore = examConfig.showScore !== false;
@@ -7112,16 +7171,16 @@ function exportSoalXlsx(examId) {
 
   const rows = mcQuestions.map(q => [
     q.text || '',
-    '',                                        // Bidang — diisi manual
-    '',                                        // Bloom  — diisi manual
-    q.kompetensi || '',                        // EK — ambil dari kompetensi jika ada
+    '',                              // Bidang — diisi manual
+    '',                              // Bloom  — diisi manual
+    q.kompetensi || '',              // EK — dari field kompetensi jika ada
     q.options?.[0] || '',
     q.options?.[1] || '',
     q.options?.[2] || '',
     q.options?.[3] || '',
-    indexToLetter[q.correct] || '',            // Kunci (a/b/c/d)
-    '',                                        // Pembahasan — diisi manual
-    ''                                         // Tags — diisi manual
+    indexToLetter[q.correct] || '', // Kunci (a/b/c/d)
+    '',                              // Pembahasan — diisi manual
+    ''                               // Tags — diisi manual
   ]);
 
   const wb = XLSX.utils.book_new();
