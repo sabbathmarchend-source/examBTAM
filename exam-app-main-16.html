@@ -4204,7 +4204,7 @@ correct adalah index 0-3 untuk pilihan ganda, -1 untuk essay.
 Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6) beserta deskripsinya, atau gunakan format Kompetensi Dasar (KD) jika relevan.`;
 
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const res = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4214,7 +4214,12 @@ Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6)
       })
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error.message || 'Gemini API error');
+    if (data.error) {
+      const msg = data.error.message || '';
+      const isQuota = data.error.status === 'RESOURCE_EXHAUSTED' || msg.toLowerCase().includes('quota');
+      if (isQuota) throw new Error('QUOTA_EXCEEDED');
+      throw new Error('Gemini API error: ' + msg);
+    }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!text) throw new Error('Respons kosong dari Gemini');
     // Strip markdown fences if present
@@ -4237,7 +4242,11 @@ Untuk field "kompetensi", isi dengan level taksonomi Bloom yang sesuai (C1–C6)
     closeModal('modal-ai');
     toast(`${generated.length} soal berhasil di-generate! ✓`, 'ok');
   } catch(e) {
-    status.innerHTML = '❌ Gagal generate: ' + e.message;
+    if (e.message === 'QUOTA_EXCEEDED') {
+      status.innerHTML = '❌ Quota harian Gemini habis. Coba lagi besok atau cek batas pemakaian di <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a>.';
+    } else {
+      status.innerHTML = '❌ Gagal generate: ' + e.message;
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = '✨ Generate Soal';
