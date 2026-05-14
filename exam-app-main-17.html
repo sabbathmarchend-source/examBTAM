@@ -7156,39 +7156,62 @@ async function downloadExcelKehadiran() {
 // ══════════════════════════════════════════
 // EXPORT SOAL → XLSX (format template BTAM)
 // ══════════════════════════════════════════
-function exportSoalXlsx(examId) {
+async function exportSoalXlsx(examId) {
   const exam = allExams.find(e => e.id === examId);
   if (!exam) return;
 
-  const mcQuestions = (exam.questions || []).filter(q => q.type === 'mc' || !q.type);
-  if (!mcQuestions.length) {
-    toast('Tidak ada soal pilihan ganda untuk diekspor!', 'error');
+  const allQuestions = exam.questions || [];
+  if (!allQuestions.length) {
+    toast('Ujian ini belum memiliki soal!', 'error');
     return;
   }
 
+  // Fetch kunci jawaban dari se_answers (hanya bisa diakses admin yang sudah login)
+  let answerKey = [];
+  if (db) {
+    try {
+      const ansDoc = await db.collection('se_answers').doc(examId).get();
+      if (ansDoc.exists) answerKey = ansDoc.data().answers || [];
+    } catch(e) {
+      toast('Gagal mengambil kunci jawaban dari cloud: ' + e.message, 'error');
+      return;
+    }
+  }
+
+  // Filter hanya soal MC, sambil catat index asli untuk lookup ke answerKey
   const indexToLetter = ['a', 'b', 'c', 'd'];
   const header = ['Pertanyaan','Bidang','Bloom','EK','Opsi A','Opsi B','Opsi C','Opsi D','Kunci','Pembahasan','Tags'];
 
-  const rows = mcQuestions.map(q => [
-    q.text || '',
-    '',                              // Bidang — diisi manual
-    '',                              // Bloom  — diisi manual
-    q.kompetensi || '',              // EK — dari field kompetensi jika ada
-    q.options?.[0] || '',
-    q.options?.[1] || '',
-    q.options?.[2] || '',
-    q.options?.[3] || '',
-    indexToLetter[q.correct] || '', // Kunci (a/b/c/d)
-    '',                              // Pembahasan — diisi manual
-    ''                               // Tags — diisi manual
-  ]);
+  const rows = [];
+  allQuestions.forEach((q, i) => {
+    if (q.type === 'essay') return; // skip essay
+    const correctIndex = answerKey[i]?.correct ?? q.correct ?? -1;
+    rows.push([
+      q.text || '',
+      '',                                        // Bidang — diisi manual
+      '',                                        // Bloom  — diisi manual
+      q.kompetensi || '',                        // EK — dari field kompetensi
+      q.options?.[0] || '',
+      q.options?.[1] || '',
+      q.options?.[2] || '',
+      q.options?.[3] || '',
+      correctIndex >= 0 ? indexToLetter[correctIndex] : '', // Kunci dari se_answers
+      '',                                        // Pembahasan — diisi manual
+      ''                                         // Tags — diisi manual
+    ]);
+  });
+
+  if (!rows.length) {
+    toast('Tidak ada soal pilihan ganda untuk diekspor!', 'error');
+    return;
+  }
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
   ws['!cols'] = [40, 12, 8, 10, 20, 20, 20, 20, 6, 30, 15].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, ws, 'Template Soal');
   XLSX.writeFile(wb, `Soal-${exam.code || examId}.xlsx`);
-  toast(`${mcQuestions.length} soal berhasil diekspor ke Excel!`, 'ok');
+  toast(`${rows.length} soal berhasil diekspor ke Excel!`, 'ok');
 }
 </script>
 
