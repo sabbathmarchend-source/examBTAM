@@ -3654,11 +3654,35 @@ function newExam() {
   toast('Ujian baru siap diedit', 'ok');
 }
 
-function openExamEditor(id) {
+async function openExamEditor(id) {
   const exam = allExams.find(e => e.id === id);
   if (!exam) return;
   activeExamId = id;
   questions = JSON.parse(JSON.stringify(exam.questions || []));
+
+  // Fetch kunci jawaban dari se_answers dan inject ke questions
+  if (db) {
+    try {
+      const ansDoc = await db.collection('se_answers').doc(id).get();
+      if (ansDoc.exists) {
+        const answerKey = ansDoc.data().answers || [];
+        questions.forEach((q, i) => {
+          if (answerKey[i] !== undefined && answerKey[i].correct !== undefined) {
+            q.correct = answerKey[i].correct;
+          }
+        });
+        // Sync ke allExams dan localStorage agar konsisten
+        const idx = allExams.findIndex(e => e.id === id);
+        if (idx >= 0) allExams[idx].questions = JSON.parse(JSON.stringify(questions));
+        saveAllExams();
+      }
+    } catch(e) {
+      toast('⚠️ Gagal mengambil kunci jawaban dari cloud. Pastikan Anda online dan sudah login sebagai admin. Kunci jawaban mungkin tidak akurat.', 'error');
+    }
+  } else {
+    toast('⚠️ Tidak terhubung ke cloud. Kunci jawaban yang ditampilkan mungkin tidak akurat.', '');
+  }
+
   // Populate form
   document.getElementById('exam-name').value = exam.name || '';
   document.getElementById('exam-code').value = exam.code || '';
