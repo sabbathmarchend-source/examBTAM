@@ -7294,7 +7294,7 @@ async function exportSoalXlsx(examId) {
     const correctIndex = answerKey[i]?.correct ?? q.correct ?? -1;
     rows.push([
       q.text || '',
-      '',                                        // Bidang — diisi manual
+      exam.bidang || '',                         // Bidang — dari metadata ujian
       '',                                        // Bloom  — diisi manual
       q.kompetensi || '',                        // EK — dari field kompetensi
       q.options?.[0] || '',
