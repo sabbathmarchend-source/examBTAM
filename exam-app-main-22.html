@@ -7325,7 +7325,6 @@ let _cachedExamForCode = null;
 
 async function onExamCodeInput() {
   const code = document.getElementById('entry-code').value.trim().toUpperCase();
-  toast(`[DEBUG] onExamCodeInput dipanggil: "${code}"`, '');
   const nameBanner     = document.getElementById('entry-exam-name-banner');
   const nameText       = document.getElementById('entry-exam-name-text');
   const notFoundBanner = document.getElementById('entry-code-notfound');
@@ -7407,8 +7406,7 @@ async function autoFillStudentName() {
     (db ? await cloudFindExamByCode(code).catch(()=>null) : null);
 
   if (!cfg) {
-    toast(`[DEBUG] Ujian tidak ditemukan: ${code}`, 'error');
-    resetAutofill(); return;
+      resetAutofill(); return;
   }
   if (!_cachedExamForCode) _cachedExamForCode = cfg;
 
@@ -7420,12 +7418,10 @@ async function autoFillStudentName() {
       const doc = await db.collection('se_participants').doc(cfg.id).get();
       if (doc.exists) { pData = doc.data(); pDataFromCloud = true; }
     } catch(e) {
-      toast(`[DEBUG] Gagal fetch whitelist: ${e.message}`, 'error');
-    }
+        }
   }
   if (!pData) pData = getParticipantsForExam(cfg.id);
 
-  toast(`[DEBUG] wlActive=${pData?.whitelistActive} fromCloud=${pDataFromCloud} list=${pData?.list?.length ?? 0}`, '');
 
   const wlActiveKnown = pDataFromCloud || (pData && pData.list && pData.list.length > 0);
   if (wlActiveKnown && !pData.whitelistActive) {
@@ -7437,7 +7433,6 @@ async function autoFillStudentName() {
   }
 
   const found = (pData.list||[]).find(p => p.noPeserta.toLowerCase() === sid.toLowerCase());
-  toast(`[DEBUG] found=${found ? found.nama : 'null'}`, '');
 
   if (found) {
     nameHidden.value     = found.nama || '';
