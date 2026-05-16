@@ -6683,9 +6683,11 @@ function showFileProtocolHelp() {
   document.getElementById('student-id')?.addEventListener('input',  () => onStudentIdInput());
   document.getElementById('student-id')?.addEventListener('blur',   () => onStudentIdInput());
   document.getElementById('student-id')?.addEventListener('change', () => onStudentIdInput());
+  document.getElementById('student-id')?.addEventListener('keyup',  () => onStudentIdInput());
   document.getElementById('entry-code')?.addEventListener('input',  onExamCodeInput);
   document.getElementById('entry-code')?.addEventListener('blur',   onExamCodeInput);
   document.getElementById('entry-code')?.addEventListener('change', onExamCodeInput);
+  document.getElementById('entry-code')?.addEventListener('keyup',  onExamCodeInput);
 
   renderQList();
   updateAdminSummary();
@@ -7315,6 +7317,7 @@ let _cachedExamForCode = null;
 
 async function onExamCodeInput() {
   const code = document.getElementById('entry-code').value.trim().toUpperCase();
+  toast(`[DEBUG] onExamCodeInput dipanggil: "${code}"`, '');
   const nameBanner     = document.getElementById('entry-exam-name-banner');
   const nameText       = document.getElementById('entry-exam-name-text');
   const notFoundBanner = document.getElementById('entry-code-notfound');
