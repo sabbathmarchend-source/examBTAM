@@ -1822,7 +1822,7 @@
       <!-- 1. Kode Ujian -->
       <div class="form-group">
         <label>Kode Ujian</label>
-        <input type="text" id="entry-code" placeholder="Masukkan kode dari pengawas" style="text-transform:uppercase;letter-spacing:2px" oninput="onExamCodeInput()">
+        <input type="text" id="entry-code" placeholder="Masukkan kode dari pengawas" style="text-transform:uppercase;letter-spacing:2px">
         <div id="entry-exam-name-banner" style="display:none;margin-top:8px;padding:8px 12px;background:var(--green-lt);border:1px solid rgba(75,232,138,0.3);border-radius:8px;font-size:0.85rem;color:var(--green);font-weight:500">
           📋 <span id="entry-exam-name-text"></span>
         </div>
@@ -1834,7 +1834,7 @@
       <!-- 2. No. Peserta -->
       <div class="form-group">
         <label>No. Peserta</label>
-        <input type="text" id="student-id" placeholder="Masukkan nomor peserta Anda" oninput="onStudentIdInput()">
+        <input type="text" id="student-id" placeholder="Masukkan nomor peserta Anda">
         <div id="entry-autofill-banner" style="display:none;margin-top:8px;padding:10px 12px;background:var(--green-lt);border:1px solid rgba(75,232,138,0.3);border-radius:8px;font-size:0.85rem">
           <div style="color:var(--green);font-weight:600;margin-bottom:4px">✅ Peserta ditemukan</div>
           <div id="entry-autofill-nama" style="font-weight:500;color:var(--white)"></div>
@@ -6664,8 +6664,10 @@ function showFileProtocolHelp() {
   document.getElementById('exam-duration').addEventListener('input', updateAdminSummary);
 
   // Live checks on entry form
+  document.getElementById('student-id')?.addEventListener('input',  () => onStudentIdInput());
   document.getElementById('student-id')?.addEventListener('blur',   () => onStudentIdInput());
   document.getElementById('student-id')?.addEventListener('change', () => onStudentIdInput());
+  document.getElementById('entry-code')?.addEventListener('input',  onExamCodeInput);
   document.getElementById('entry-code')?.addEventListener('blur',   onExamCodeInput);
   document.getElementById('entry-code')?.addEventListener('change', onExamCodeInput);
 
