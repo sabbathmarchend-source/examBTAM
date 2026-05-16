@@ -2896,8 +2896,19 @@ async function initFirebase(config) {
   }
 }
 
+// ── Hardcoded Firebase config (exambtam) ─────
+const HARDCODED_FB_CONFIG = {
+  apiKey: "AIzaSyDLTZtJBI7Bw-oJCB0ys_KYaZczaZSCoGA",
+  authDomain: "exambtam.firebaseapp.com",
+  projectId: "exambtam",
+  storageBucket: "exambtam.firebasestorage.app",
+  messagingSenderId: "146227968588",
+  appId: "1:146227968588:web:d4ad9d36f25aa2a95d92e9",
+  measurementId: "G-DD34PNGKJ9"
+};
+
 async function loadSavedFirebaseConfig() {
-  // Priority 1: config dari URL (?cfg=BASE64)
+  // Priority 1: config dari URL (?cfg=BASE64) — tetap didukung sebagai override
   try {
     const params = new URLSearchParams(location.search);
     const cfgParam = params.get('cfg');
@@ -2908,7 +2919,6 @@ async function loadSavedFirebaseConfig() {
         if (ok) {
           localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(config));
           updateCloudBadge('connected');
-          // Juga coba restore sesi admin jika dibuka di perangkat admin
           await tryRestoreAdminSession();
           return;
         }
@@ -2916,13 +2926,25 @@ async function loadSavedFirebaseConfig() {
     }
   } catch(e) {}
 
-  // Priority 2: config dari localStorage
+  // Priority 2: config dari localStorage (manual setup atau override)
   try {
     const raw = localStorage.getItem(FB_CONFIG_KEY);
-    if (!raw) return;
-    const config = JSON.parse(raw);
-    const ok = await initFirebase(config);
+    if (raw) {
+      const config = JSON.parse(raw);
+      const ok = await initFirebase(config);
+      if (ok) {
+        updateCloudBadge('connected');
+        await tryRestoreAdminSession();
+        return;
+      }
+    }
+  } catch(e) {}
+
+  // Priority 3: hardcoded config (default)
+  try {
+    const ok = await initFirebase(HARDCODED_FB_CONFIG);
     if (ok) {
+      localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(HARDCODED_FB_CONFIG));
       updateCloudBadge('connected');
       await tryRestoreAdminSession();
     }
@@ -3063,13 +3085,8 @@ function updateCloudBadge(state) {
 
 // ── Student link generation ───────────────
 function buildStudentLink() {
-  const raw = localStorage.getItem(FB_CONFIG_KEY);
-  if (!raw) return null;
-  try {
-    const encoded = btoa(raw);
-    const base = location.href.split('?')[0].split('#')[0];
-    return `${base}?cfg=${encoded}`;
-  } catch(e) { return null; }
+  // Kembalikan URL bersih — config sudah hardcoded, tidak perlu ?cfg=
+  return location.href.split('?')[0].split('#')[0];
 }
 
 function copyStudentLink() {
