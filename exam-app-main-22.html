@@ -1836,9 +1836,25 @@
         <label>No. Peserta</label>
         <input type="text" id="student-id" placeholder="Masukkan nomor peserta Anda">
         <div id="entry-autofill-banner" style="display:none;margin-top:8px;padding:10px 12px;background:var(--green-lt);border:1px solid rgba(75,232,138,0.3);border-radius:8px;font-size:0.85rem">
-          <div style="color:var(--green);font-weight:600;margin-bottom:4px">✅ Peserta ditemukan</div>
-          <div id="entry-autofill-nama" style="font-weight:500;color:var(--white)"></div>
-          <div id="entry-autofill-detail" style="color:var(--muted);font-size:0.8rem;margin-top:2px"></div>
+          <div style="color:var(--green);font-weight:600;margin-bottom:6px">✅ Peserta ditemukan</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;gap:8px">
+              <span style="color:var(--muted);font-size:0.78rem;min-width:64px">Nama</span>
+              <span id="entry-autofill-nama" style="font-weight:500;color:var(--white)"></span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <span style="color:var(--muted);font-size:0.78rem;min-width:64px">Jabatan</span>
+              <span id="entry-autofill-jabatan" style="color:var(--white)"></span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <span style="color:var(--muted);font-size:0.78rem;min-width:64px">Instansi</span>
+              <span id="entry-autofill-instansi" style="color:var(--white)"></span>
+            </div>
+            <div id="entry-autofill-detail-wrap" style="display:flex;gap:8px">
+              <span style="color:var(--muted);font-size:0.78rem;min-width:64px">Kab/Kota</span>
+              <span id="entry-autofill-detail" style="color:var(--muted);font-size:0.8rem"></span>
+            </div>
+          </div>
         </div>
         <div id="entry-notfound-banner" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.3);border-radius:8px;font-size:0.83rem;color:var(--red)">
           ❌ No. Peserta tidak terdaftar dalam ujian ini. Hubungi pengawas.
@@ -7415,13 +7431,12 @@ async function autoFillStudentName() {
   if (found) {
     nameHidden.value     = found.nama || '';
     instansiHidden.value = found.instansi || '';
-    namaEl.textContent   = found.nama || '';
-    const parts = [];
-    if (found.jabatan)  parts.push(found.jabatan);
-    if (found.instansi) parts.push(found.instansi);
-    if (found.kabKota)  parts.push(found.kabKota);
-    if (found.provinsi) parts.push(found.provinsi);
-    detailEl.textContent = parts.join(' — ');
+    document.getElementById('entry-autofill-nama').textContent    = found.nama    || '-';
+    document.getElementById('entry-autofill-jabatan').textContent = found.jabatan || '-';
+    document.getElementById('entry-autofill-instansi').textContent = found.instansi || '-';
+    const kabKota = [found.kabKota, found.provinsi].filter(Boolean).join(', ');
+    document.getElementById('entry-autofill-detail').textContent  = kabKota || '-';
+    document.getElementById('entry-autofill-detail-wrap').style.display = kabKota ? 'flex' : 'none';
     autofillBanner.style.display = 'block';
     notfoundBanner.style.display = 'none';
   } else {
