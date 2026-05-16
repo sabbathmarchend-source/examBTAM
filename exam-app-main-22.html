@@ -7351,7 +7351,7 @@ async function autoFillStudentName() {
   function resetAutofill() {
     autofillBanner.style.display = 'none';
     notfoundBanner.style.display = 'none';
-    nameHidden.value    = '';
+    nameHidden.value     = '';
     instansiHidden.value = '';
   }
 
@@ -7361,23 +7361,31 @@ async function autoFillStudentName() {
     await Promise.race([_fbInitPromise, new Promise(r => setTimeout(r, 5000))]);
   }
 
+  // Gunakan cache jika ada, fallback ke lookup
+  loadAllExams();
   const cfg = _cachedExamForCode ||
     findExamByCode(code) ||
     (db ? await cloudFindExamByCode(code).catch(()=>null) : null);
   if (!cfg) { resetAutofill(); return; }
 
-  // Ambil data whitelist
+  // Simpan ke cache kalau belum
+  if (!_cachedExamForCode) _cachedExamForCode = cfg;
+
+  // Ambil data whitelist — cloud dulu, fallback lokal
   let pData = null;
+  let pDataFromCloud = false;
   if (db) {
     try {
       const doc = await db.collection('se_participants').doc(cfg.id).get();
-      if (doc.exists) pData = doc.data();
+      if (doc.exists) { pData = doc.data(); pDataFromCloud = true; }
     } catch(e) {}
   }
   if (!pData) pData = getParticipantsForExam(cfg.id);
 
-  // Whitelist tidak aktif → tolak
-  if (!pData || !pData.whitelistActive) {
+  // Whitelist tidak aktif — hanya tolak kalau data dari cloud (sumber kebenaran)
+  // atau kalau lokal punya data yang jelas (list.length > 0 tapi whitelistActive false)
+  const wlActiveKnown = pDataFromCloud || (pData && pData.list && pData.list.length > 0);
+  if (wlActiveKnown && !pData.whitelistActive) {
     notfoundBanner.style.display = '';
     notfoundBanner.textContent = '❌ Ujian ini tidak memiliki daftar peserta aktif. Hubungi pengawas.';
     autofillBanner.style.display = 'none';
