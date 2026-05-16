@@ -7312,7 +7312,6 @@ async function onStudentIdInput() {
 
 // ── Autofill nama ujian saat kode diketik ─────────────────────────────────
 let _cachedExamForCode = null;
-let _lastCode = '';
 
 async function onExamCodeInput() {
   const code = document.getElementById('entry-code').value.trim().toUpperCase();
@@ -7320,21 +7319,15 @@ async function onExamCodeInput() {
   const nameText       = document.getElementById('entry-exam-name-text');
   const notFoundBanner = document.getElementById('entry-code-notfound');
 
-  // Hanya proses kalau kode benar-benar berubah
-  if (code === _lastCode) return;
-  _lastCode = code;
-
-  // Reset cache dan autofill peserta kalau kode berubah
-  _cachedExamForCode = null;
-  document.getElementById('student-name').value    = '';
-  document.getElementById('student-instansi').value = '';
-  document.getElementById('entry-autofill-banner').style.display  = 'none';
-  document.getElementById('entry-notfound-banner').style.display  = 'none';
-
   if (!code || code.length < 2) {
-    nameBanner.style.display    = 'none';
+    _cachedExamForCode = null;
+    nameBanner.style.display     = 'none';
     notFoundBanner.style.display = 'none';
     document.getElementById('entry-exam-title').textContent = 'Masukkan kode ujian untuk melanjutkan';
+    document.getElementById('entry-autofill-banner').style.display = 'none';
+    document.getElementById('entry-notfound-banner').style.display = 'none';
+    document.getElementById('student-name').value     = '';
+    document.getElementById('student-instansi').value = '';
     return;
   }
 
@@ -7347,19 +7340,26 @@ async function onExamCodeInput() {
   if (!cfg && db) cfg = await cloudFindExamByCode(code).catch(() => null);
 
   if (cfg) {
-    _cachedExamForCode = cfg;
-    nameText.textContent = cfg.name || cfg.code;
-    nameBanner.style.display    = '';
+    // Reset autofill peserta hanya kalau ujian berubah
+    if (!_cachedExamForCode || _cachedExamForCode.id !== cfg.id) {
+      document.getElementById('student-name').value     = '';
+      document.getElementById('student-instansi').value = '';
+      document.getElementById('entry-autofill-banner').style.display = 'none';
+      document.getElementById('entry-notfound-banner').style.display = 'none';
+    }
+    _cachedExamForCode           = cfg;
+    nameText.textContent         = cfg.name || cfg.code;
+    nameBanner.style.display     = 'block';
     notFoundBanner.style.display = 'none';
     document.getElementById('entry-exam-title').textContent = cfg.name || cfg.code;
-    // Kalau no peserta sudah terisi, trigger autofill ulang
+    // Trigger autofill peserta kalau no peserta sudah terisi
     if (document.getElementById('student-id').value.trim()) {
       await autoFillStudentName();
     }
   } else {
-    _cachedExamForCode = null;
-    nameBanner.style.display    = 'none';
-    notFoundBanner.style.display = code.length >= 3 ? '' : 'none';
+    _cachedExamForCode           = null;
+    nameBanner.style.display     = 'none';
+    notFoundBanner.style.display = code.length >= 3 ? 'block' : 'none';
     document.getElementById('entry-exam-title').textContent = 'Masukkan kode ujian untuk melanjutkan';
   }
 
