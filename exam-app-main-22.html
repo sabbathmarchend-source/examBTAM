@@ -6679,15 +6679,23 @@ function showFileProtocolHelp() {
 
   document.getElementById('exam-duration').addEventListener('input', updateAdminSummary);
 
-  // Live checks on entry form
-  document.getElementById('student-id')?.addEventListener('input',  () => onStudentIdInput());
-  document.getElementById('student-id')?.addEventListener('blur',   () => onStudentIdInput());
-  document.getElementById('student-id')?.addEventListener('change', () => onStudentIdInput());
-  document.getElementById('student-id')?.addEventListener('keyup',  () => onStudentIdInput());
-  document.getElementById('entry-code')?.addEventListener('input',  onExamCodeInput);
-  document.getElementById('entry-code')?.addEventListener('blur',   onExamCodeInput);
-  document.getElementById('entry-code')?.addEventListener('change', onExamCodeInput);
-  document.getElementById('entry-code')?.addEventListener('keyup',  onExamCodeInput);
+  // Live checks on entry form — pakai event delegation agar tidak bergantung DOM order
+  document.addEventListener('input', function(e) {
+    if (e.target.id === 'entry-code')  onExamCodeInput();
+    if (e.target.id === 'student-id')  onStudentIdInput();
+  });
+  document.addEventListener('keyup', function(e) {
+    if (e.target.id === 'entry-code')  onExamCodeInput();
+    if (e.target.id === 'student-id')  onStudentIdInput();
+  });
+  document.addEventListener('change', function(e) {
+    if (e.target.id === 'entry-code')  onExamCodeInput();
+    if (e.target.id === 'student-id')  onStudentIdInput();
+  });
+  document.addEventListener('blur', function(e) {
+    if (e.target.id === 'entry-code')  onExamCodeInput();
+    if (e.target.id === 'student-id')  onStudentIdInput();
+  }, true);
 
   renderQList();
   updateAdminSummary();
