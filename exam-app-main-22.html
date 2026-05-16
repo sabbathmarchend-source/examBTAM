@@ -1831,7 +1831,21 @@
         </div>
       </div>
 
-      <!-- 2. Jenis Ujian -->
+      <!-- 2. No. Peserta -->
+      <div class="form-group">
+        <label>No. Peserta</label>
+        <input type="text" id="student-id" placeholder="Masukkan nomor peserta Anda" oninput="onStudentIdInput()">
+        <div id="entry-autofill-banner" style="display:none;margin-top:8px;padding:10px 12px;background:var(--green-lt);border:1px solid rgba(75,232,138,0.3);border-radius:8px;font-size:0.85rem">
+          <div style="color:var(--green);font-weight:600;margin-bottom:4px">✅ Peserta ditemukan</div>
+          <div id="entry-autofill-nama" style="font-weight:500;color:var(--white)"></div>
+          <div id="entry-autofill-detail" style="color:var(--muted);font-size:0.8rem;margin-top:2px"></div>
+        </div>
+        <div id="entry-notfound-banner" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.3);border-radius:8px;font-size:0.83rem;color:var(--red)">
+          ❌ No. Peserta tidak terdaftar dalam ujian ini. Hubungi pengawas.
+        </div>
+      </div>
+
+      <!-- 3. Jenis Ujian -->
       <div class="form-group">
         <label>Jenis Ujian</label>
         <div class="exam-type-wrap" id="exam-type-wrap">
@@ -1847,20 +1861,6 @@
           </div>
         </div>
         <div id="exam-type-info" style="font-size:0.78rem;color:var(--muted);margin-top:6px;text-align:center"></div>
-      </div>
-
-      <!-- 3. No. Peserta -->
-      <div class="form-group">
-        <label>No. Peserta</label>
-        <input type="text" id="student-id" placeholder="Masukkan nomor peserta Anda" oninput="onStudentIdInput()">
-        <div id="entry-autofill-banner" style="display:none;margin-top:8px;padding:10px 12px;background:var(--green-lt);border:1px solid rgba(75,232,138,0.3);border-radius:8px;font-size:0.85rem">
-          <div style="color:var(--green);font-weight:600;margin-bottom:4px">✅ Peserta ditemukan</div>
-          <div id="entry-autofill-nama" style="font-weight:500;color:var(--white)"></div>
-          <div id="entry-autofill-detail" style="color:var(--muted);font-size:0.8rem;margin-top:2px"></div>
-        </div>
-        <div id="entry-notfound-banner" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.3);border-radius:8px;font-size:0.83rem;color:var(--red)">
-          ❌ No. Peserta tidak terdaftar dalam ujian ini. Hubungi pengawas.
-        </div>
       </div>
 
       <!-- Hidden fields — diisi JS saat autofill, dibaca startExam() -->
