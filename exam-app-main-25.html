@@ -2782,16 +2782,27 @@ async function cloudSaveExam(exam) {
         }))
       : [];
 
-    // ── Deteksi perubahan kunci jawaban ────────────────────────────────────
+    // ── Deteksi perubahan kunci jawaban (pre & post) ─────────────────────────
     let answerKeyChanged = false;
+    let answerKeyPostChanged = false;
     try {
       const prevAnsDoc = await db.collection('se_answers').doc(exam.id).get();
       if (prevAnsDoc.exists) {
         const prevKey = prevAnsDoc.data().answers || [];
-        // Bandingkan setiap entri: correct, points, DAN type — ketiganya mempengaruhi skor
         answerKeyChanged = prevKey.length !== newAnswerKey.length ||
           newAnswerKey.some((nk, i) => {
             const pk = prevKey[i];
+            return !pk
+              || pk.correct !== nk.correct
+              || (pk.points || 10) !== (nk.points || 10)
+              || (pk.type || 'mc') !== (nk.type || 'mc')
+              || (pk.kompetensi || '') !== (nk.kompetensi || '');
+          });
+        // Cek perubahan kunci post
+        const prevKeyPost = prevAnsDoc.data().answers_post || [];
+        answerKeyPostChanged = prevKeyPost.length !== newAnswerKeyPost.length ||
+          newAnswerKeyPost.some((nk, i) => {
+            const pk = prevKeyPost[i];
             return !pk
               || pk.correct !== nk.correct
               || (pk.points || 10) !== (nk.points || 10)
@@ -2832,20 +2843,21 @@ async function cloudSaveExam(exam) {
     await db.collection('se_answers').doc(exam.id).set(answerPayload);
 
     // ── Jika kunci jawaban berubah: rescore semua hasil yang sudah ada ─────
-    if (answerKeyChanged) {
+    if (answerKeyChanged || answerKeyPostChanged) {
       console.log('Kunci jawaban berubah — memulai rescore otomatis...');
-      await rescoreExamResults(exam.id, exam.code, newAnswerKey);
+      await rescoreExamResults(exam.id, exam.code, newAnswerKey, newAnswerKeyPost);
     }
 
   } catch(e) { console.warn('Cloud save exam failed:', e); }
 }
 
 // ── Rescore semua hasil (se_results) untuk satu ujian ─────────────────────
-async function rescoreExamResults(examId, examCode, newAnswerKey) {
+async function rescoreExamResults(examId, examCode, newAnswerKey, newAnswerKeyPost = []) {
   if (!db || !isAdminSignedIn()) return;
   try {
     // Buat Map kunci jawaban berindeks by posisi soal (untuk lookup O(1) yang aman)
-    const answerKeyMap = new Map(newAnswerKey.map((k, i) => [i, k]));
+    const answerKeyMap     = new Map(newAnswerKey.map((k, i) => [i, k]));
+    const answerKeyPostMap = new Map(newAnswerKeyPost.map((k, i) => [i, k]));
 
     // Ambil semua se_results untuk exam ini.
     // Dokumen lama mungkin belum punya field examId (hanya examCode) — query keduanya.
@@ -2884,13 +2896,18 @@ async function rescoreExamResults(examId, examCode, newAnswerKey) {
       const sub = subMap.get(res.submissionId);
       if (!sub) continue; // submission sudah dihapus dari Firestore
 
+      // Pilih kunci yang tepat: post test dengan soal berbeda pakai answerKeyPostMap
+      const isPostSeparate = (sub.examType === 'posttest') && answerKeyPostMap.size > 0;
+      const activeKeyMap = isPostSeparate ? answerKeyPostMap : answerKeyMap;
+      const activeKey    = isPostSeparate ? newAnswerKeyPost  : newAnswerKey;
+
       let earned = 0, correct = 0, wrong = 0, unanswered = 0;
       const details = [];
-      const mcTotal = newAnswerKey.filter(k => k.type !== 'essay')
+      const mcTotal = activeKey.filter(k => k.type !== 'essay')
         .reduce((s, k) => s + (k.points || 10), 0);
 
       (sub.answers || []).forEach((sa) => {
-        const key = answerKeyMap.get(sa.questionIndex);
+        const key = activeKeyMap.get(sa.questionIndex);
         if (!key) return;
         if (key.type === 'essay') {
           if (sa.answer) correct++; else unanswered++;
@@ -6139,7 +6156,11 @@ async function prosesNilai() {
         errors++; continue;
       }
 
-      const { answers: answerKey } = answerDoc.data();
+      // Pilih kunci jawaban: post test dengan soal berbeda pakai answers_post
+      const ansData = answerDoc.data();
+      const isPostSeparate = (sub.examType === 'posttest')
+        && (ansData.answers_post && ansData.answers_post.length > 0);
+      const answerKey = isPostSeparate ? ansData.answers_post : ansData.answers;
       // Buat Map untuk lookup aman by questionIndex (aman saat soal diacak)
       const answerKeyMap = new Map(answerKey.map((k, i) => [i, k]));
       let earned = 0, correct = 0, wrong = 0, unanswered = 0;
