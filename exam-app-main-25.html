@@ -4977,13 +4977,6 @@ async function startExam() {
     return;
   }
 
-  // Pilih set soal berdasarkan examType dan useSharedQuestions
-  if (selectedExamType === 'posttest' && cfg.useSharedQuestions === false
-      && Array.isArray(cfg.questions_post) && cfg.questions_post.length > 0) {
-    // Ganti questions dengan questions_post untuk post test
-    cfg = { ...cfg, questions: cfg.questions_post, _isPostSet: true };
-  }
-
   // ── Post Test: pastikan Pre Test sudah selesai ──
   if (selectedExamType === 'posttest') {
     let donePre = hasAttempted(code, sid, 'pretest');
@@ -5033,6 +5026,16 @@ async function startExam() {
       const startBtn2 = document.querySelector('#screen-entry .btn-gold');
       if (startBtn2) { startBtn2.disabled = false; startBtn2.textContent = 'Mulai Ujian →'; }
     }
+  }
+
+  // ── Pilih set soal berdasarkan examType dan useSharedQuestions ──────────
+  // Harus dilakukan SETELAH fetch Firestore agar useSharedQuestions & questions_post fresh
+  if (selectedExamType === 'posttest' && cfg.useSharedQuestions === false) {
+    if (!Array.isArray(cfg.questions_post) || cfg.questions_post.length === 0) {
+      toast('Soal Post Test belum tersedia. Hubungi pengawas.', 'error');
+      return;
+    }
+    cfg = { ...cfg, questions: cfg.questions_post, _isPostSet: true };
   }
 
   // ── Cek akses: apakah ujian type ini sedang dibuka oleh admin ──────────
@@ -5097,6 +5100,8 @@ async function startExam() {
     return;
   }
 
+  // examConfig di-assign SETELAH swap soal (swap terjadi di atas setelah fetch Firestore)
+  // Sehingga examConfig.questions, useSharedQuestions, _answerKeyPost semuanya benar
   examConfig  = cfg;
   acSettings  = cfg.ac || {};
   // Ambil nama & instansi dari hidden field yang sudah diisi whitelist check
@@ -5689,13 +5694,15 @@ async function submitExam(timeUp=false, forceStop=false) {
     answer: answers[idx] !== undefined ? answers[idx] : null
   }));
 
+  let _ts;
+  try { _ts = firebase.firestore.FieldValue.serverTimestamp(); } catch(_) { _ts = null; }
   const submissionData = {
     name: studentInfo.name, id: studentInfo.id, instansi: studentInfo.instansi || '',
     examId: examConfig.id, examCode: examConfig.code, examName: examConfig.name,
     examType, answers: submissionAnswers, violations, warnCount,
     submittedAt: new Date().toLocaleString('id-ID'),
-    status: 'pending', // akan diubah admin jadi 'scored'
-    _ts: firebase.firestore.FieldValue.serverTimestamp()
+    status: 'pending',
+    _ts
   };
 
   // Simpan ke localStorage sebagai backup
@@ -5737,7 +5744,17 @@ async function submitExam(timeUp=false, forceStop=false) {
   try {
     submissionRef = await db.collection('se_submissions').add(submissionData);
   } catch(e) {
-    // Gagal kirim cloud — hitung lokal
+    // Gagal kirim cloud — tampilkan error spesifik, hitung lokal
+    console.error('[submitExam] se_submissions.add failed:', e.code, e.message, e);
+    const errMsg = e.code === 'permission-denied'
+      ? '⚠️ Akses ditolak Firestore (permission-denied). Periksa security rules se_submissions.'
+      : e.code === 'unavailable' || e.code === 'deadline-exceeded'
+        ? '⚠️ Koneksi ke server terputus saat pengiriman jawaban.'
+        : `⚠️ Gagal kirim jawaban: ${e.code || e.message}`;
+    try {
+      document.getElementById('r-cloud-status').innerHTML =
+        `<span style="color:var(--amber)">${errMsg} Nilai dihitung lokal — hubungi pengawas.</span>`;
+    } catch(_) {}
     _scoreAndShow(submissionAnswers);
     return;
   }
