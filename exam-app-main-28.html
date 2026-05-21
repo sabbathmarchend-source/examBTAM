@@ -316,7 +316,7 @@
     pointer-events: none;
     z-index: 10;
     white-space: nowrap;
-    font-size: 0.72rem;
+    font-size: 2.16rem;
     font-weight: 700;
     color: #888;
     opacity: 0.18;
@@ -5415,26 +5415,36 @@ function startExamWatermark() {
   const jabatan = studentInfo.jabatan || '';
   const instansi= studentInfo.instansi|| '';
 
-  const line1 = name;
-  const line2 = [jabatan, instansi].filter(Boolean).join(' · ');
-  el.innerHTML = line1 + (line2 ? '<br>' + line2 : '');
+  // 3 baris: nama, jabatan, instansi
+  let lines = [name];
+  if (jabatan)  lines.push(jabatan);
+  if (instansi) lines.push(instansi);
+  el.innerHTML = lines.join('<br>');
 
   function moveWatermark() {
     const container = document.querySelector('.exam-content');
     if (!container || !el) return;
+
     const cw = container.clientWidth  || 400;
     const ch = container.clientHeight || 600;
-    // Posisi random dalam 20%–80% area container
-    const topPct  = 15 + Math.random() * 55;
-    const leftPct = 10 + Math.random() * 60;
-    el.style.top  = topPct  + '%';
-    el.style.left = leftPct + '%';
-    // Variasi opacity tipis supaya tidak terlalu monoton
+    const ew = el.offsetWidth         || 200;
+    const eh = el.offsetHeight        || 80;
+
+    // Batas gerak: pastikan seluruh elemen tetap dalam container
+    // Kompensasi rotasi -22deg: tambah margin 15% dari dimensi watermark
+    const margin = 0.15;
+    const maxLeft = Math.max(0, cw - ew * (1 + margin));
+    const maxTop  = Math.max(0, ch - eh * (1 + margin));
+
+    const left = ew * margin + Math.random() * Math.max(0, maxLeft - ew * margin);
+    const top  = eh * margin + Math.random() * Math.max(0, maxTop  - eh * margin);
+
+    el.style.left    = left + 'px';
+    el.style.top     = top  + 'px';
     el.style.opacity = (0.14 + Math.random() * 0.08).toFixed(2);
   }
 
   moveWatermark();
-  // Bergerak setiap 4–7 detik (random interval)
   function scheduleNext() {
     const delay = 4000 + Math.random() * 3000;
     _wmTimer = setTimeout(() => {
