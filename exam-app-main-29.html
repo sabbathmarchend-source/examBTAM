@@ -2875,7 +2875,7 @@ async function cloudSaveExam(exam) {
     } else {
       answerPayload.answers_post = firebase.firestore.FieldValue.delete();
     }
-    await db.collection('se_answers').doc(exam.id).set(answerPayload);
+    await db.collection('se_answers').doc(exam.id).set(answerPayload, { merge: true });
 
     // ── Jika kunci jawaban berubah: rescore semua hasil yang sudah ada ─────
     if (answerKeyChanged || answerKeyPostChanged) {
@@ -5164,12 +5164,21 @@ async function startExam() {
   }
 
   // ── One-time attempt check ──────────────────
+  // Cek localStorage peserta dulu sebagai shortcut
   let alreadyAttempted = hasAttempted(code, sid, selectedExamType);
-  if (!alreadyAttempted && db) {
+  if (db) {
+    // Selalu verifikasi ke Firestore jika ada koneksi — sumber kebenaran final
+    // Ini penting agar reset oleh admin (yang menghapus se_attempts di Firestore)
+    // bisa diakui oleh browser peserta yang masih punya catatan di localStorage
     try {
       updateCloudBadge('syncing');
-      alreadyAttempted = await cloudCheckAttempt(code, sid, selectedExamType);
+      const cloudAttempted = await cloudCheckAttempt(code, sid, selectedExamType);
       updateCloudBadge('connected');
+      if (!cloudAttempted && alreadyAttempted) {
+        // Admin sudah reset — bersihkan localStorage peserta juga
+        deleteAttempt(code, sid, selectedExamType);
+      }
+      alreadyAttempted = cloudAttempted;
     } catch(e) { updateCloudBadge('connected'); }
   }
   if (alreadyAttempted) {
