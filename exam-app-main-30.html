@@ -6477,11 +6477,7 @@ function getResults() {
 }
 
 async function renderDashboard() {
-  // Refresh allExams dari Firestore agar data selalu terkini
-  if (db) {
-    const freshExams = await cloudLoadExams();
-    if (freshExams) allExams = freshExams;
-  }
+  if (db) { const fresh = await cloudLoadExams(); if (fresh) allExams = fresh; }
 
   const examFilter = document.getElementById('dash-filter-exam');
   const selectedCode  = examFilter?.value || '';
@@ -7096,11 +7092,7 @@ async function renderComparison() {
   const examFilter = document.getElementById('cmp-filter-exam');
   if (!examFilter) return;
 
-  // Refresh allExams dari Firestore agar data selalu terkini
-  if (db) {
-    const freshExams = await cloudLoadExams();
-    if (freshExams) allExams = freshExams;
-  }
+  if (db) { const fresh = await cloudLoadExams(); if (fresh) allExams = fresh; }
 
   const selectedBidang  = document.getElementById('cmp-filter-bidang')?.value || '';
   const filterDateStart = document.getElementById('cmp-filter-date-start')?.value || '';
@@ -7240,12 +7232,13 @@ async function renderComparison() {
   `;
 }
 
-function downloadExcelComparison() {
+async function downloadExcelComparison() {
   const examFilter = document.getElementById('cmp-filter-exam');
   const selectedCode = examFilter?.value || '';
   if (!selectedCode) { toast('Pilih ujian terlebih dahulu', 'error'); return; }
 
-  const allResults  = getResults();
+  const _cloudRes3 = db ? await cloudLoadResults(selectedCode) : null;
+  const allResults  = _cloudRes3 || getResults();
   const examResults = allResults.filter(r => r.examCode === selectedCode);
   const preResults  = examResults.filter(r => r.examType === 'pretest');
   const postResults = examResults.filter(r => r.examType === 'posttest');
@@ -8626,7 +8619,8 @@ async function renderKehadiran() {
   const exam    = allExams.find(e => e.id === examId);
   const pData   = getParticipantsForExam(examId);
   const list    = pData.list || [];
-  const results = getResults().filter(r => r.examCode === (exam?.code || ''));
+  const _cloudRes = db ? await cloudLoadResults(exam?.code || null) : null;
+  const results = (_cloudRes || getResults()).filter(r => r.examCode === (exam?.code || ''));
 
   // Build lookup: noPeserta → { pretest score, posttest score }
   const resultMap = {};
@@ -8698,7 +8692,8 @@ async function downloadExcelKehadiran() {
   const list    = pData.list || [];
   if (!list.length) { toast('Tidak ada peserta terdaftar untuk ujian ini', 'error'); return; }
 
-  const results = getResults().filter(r => r.examCode === (exam?.code || ''));
+  const _cloudRes2 = db ? await cloudLoadResults(exam?.code || null) : null;
+  const results = (_cloudRes2 || getResults()).filter(r => r.examCode === (exam?.code || ''));
   const resultMap = {};
   results.forEach(r => {
     const key = (r.id||'').toLowerCase();
