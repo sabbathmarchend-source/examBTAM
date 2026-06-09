@@ -5164,12 +5164,21 @@ async function startExam() {
   }
 
   // ── One-time attempt check ──────────────────
+  // Cek localStorage peserta dulu sebagai shortcut
   let alreadyAttempted = hasAttempted(code, sid, selectedExamType);
-  if (!alreadyAttempted && db) {
+  if (db) {
+    // Selalu verifikasi ke Firestore jika ada koneksi — sumber kebenaran final
+    // Ini penting agar reset oleh admin (yang menghapus se_attempts di Firestore)
+    // bisa diakui oleh browser peserta yang masih punya catatan di localStorage
     try {
       updateCloudBadge('syncing');
-      alreadyAttempted = await cloudCheckAttempt(code, sid, selectedExamType);
+      const cloudAttempted = await cloudCheckAttempt(code, sid, selectedExamType);
       updateCloudBadge('connected');
+      if (!cloudAttempted && alreadyAttempted) {
+        // Admin sudah reset — bersihkan localStorage peserta juga
+        deleteAttempt(code, sid, selectedExamType);
+      }
+      alreadyAttempted = cloudAttempted;
     } catch(e) { updateCloudBadge('connected'); }
   }
   if (alreadyAttempted) {
@@ -6258,7 +6267,11 @@ function switchAdminTab(tab) {
 
   if (tab === 'ujian') {
     ujianPanel.classList.remove('hidden');
-    renderExamList();
+    if (db) {
+      cloudLoadExams().then(fresh => { if (fresh) allExams = fresh; renderExamList(); });
+    } else {
+      renderExamList();
+    }
   } else if (tab === 'soal') {
     layout.style.display = '';
     sidebar.style.display = '';
@@ -6464,6 +6477,12 @@ function getResults() {
 }
 
 async function renderDashboard() {
+  // Refresh allExams dari Firestore agar data selalu terkini
+  if (db) {
+    const freshExams = await cloudLoadExams();
+    if (freshExams) allExams = freshExams;
+  }
+
   const examFilter = document.getElementById('dash-filter-exam');
   const selectedCode  = examFilter?.value || '';
   const selectedBidang    = document.getElementById('dash-filter-bidang')?.value || '';
@@ -7076,6 +7095,12 @@ function getKategoriPerubahan(delta) {
 async function renderComparison() {
   const examFilter = document.getElementById('cmp-filter-exam');
   if (!examFilter) return;
+
+  // Refresh allExams dari Firestore agar data selalu terkini
+  if (db) {
+    const freshExams = await cloudLoadExams();
+    if (freshExams) allExams = freshExams;
+  }
 
   const selectedBidang  = document.getElementById('cmp-filter-bidang')?.value || '';
   const filterDateStart = document.getElementById('cmp-filter-date-start')?.value || '';
