@@ -4296,7 +4296,7 @@ async function syncAttemptsFromSubmissions() {
   }
 }
 
-
+async function resetOneAttempt(examCode, studentId, examType) {
   const typeLabel = examType ? (examType === 'pretest' ? 'Pre Test' : 'Post Test') : 'semua ujian';
   if (!confirm(`Reset ${typeLabel} untuk peserta "${studentId}"?`)) return;
   deleteAttempt(examCode, studentId, examType);
