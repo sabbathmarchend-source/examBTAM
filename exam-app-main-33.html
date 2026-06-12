@@ -4273,9 +4273,7 @@ async function syncAttemptsFromSubmissions() {
   if (!confirm(`Cek semua submission untuk ujian "${exam.name}" dan buatkan data percobaan (se_attempts) yang hilang?`)) return;
 
   try {
-    const snap = await db.collection('se_submissions')
-      .where('examCode', '==', examCode)
-      .get();
+    const snap = await db.collection('se_submissions').get();
 
     if (snap.empty) {
       toast('Tidak ada submission untuk ujian ini.', 'ok');
@@ -4285,6 +4283,7 @@ async function syncAttemptsFromSubmissions() {
     let created = 0, checked = 0;
     for (const d of snap.docs) {
       const data = d.data();
+      if (data.examCode !== examCode) continue;
       if (data.status === 'deleted') continue;
       const studentId = data.id;
       const examType  = data.examType || 'pretest';
