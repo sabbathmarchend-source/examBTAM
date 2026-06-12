@@ -1488,7 +1488,7 @@
         </div>
         <div class="form-group">
           <label>Maks. Peringatan sebelum dikeluarkan</label>
-          <input type="number" id="exam-maxwarn" value="3" min="1" max="10">
+          <input type="number" id="exam-maxwarn" value="5" min="1" max="10">
         </div>
         <div class="form-group">
           <label>Bidang</label>
@@ -4013,7 +4013,7 @@ function newExam() {
   document.getElementById('exam-name').value = '';
   document.getElementById('exam-code').value = '';
   document.getElementById('exam-duration').value = '60';
-  document.getElementById('exam-maxwarn').value = '3';
+  document.getElementById('exam-maxwarn').value = '5';
   document.getElementById('exam-bidang').value = '';
   document.getElementById('exam-date-start').value = '';
   document.getElementById('exam-date-end').value = '';
@@ -4083,7 +4083,7 @@ async function openExamEditor(id) {
   document.getElementById('exam-name').value = exam.name || '';
   document.getElementById('exam-code').value = exam.code || '';
   document.getElementById('exam-duration').value = exam.duration || 60;
-  document.getElementById('exam-maxwarn').value = exam.maxWarnings || 3;
+  document.getElementById('exam-maxwarn').value = exam.maxWarnings || 5;
   document.getElementById('exam-bidang').value = exam.bidang || '';
   document.getElementById('exam-date-start').value = exam.dateStart || '';
   document.getElementById('exam-date-end').value = exam.dateEnd || '';
@@ -4223,6 +4223,16 @@ async function renderAttemptList(examCode) {
     return;
   }
 
+  // Build nama lookup from whitelist
+  const exam = allExams.find(e => e.code === examCode);
+  const wlData = exam ? getParticipantsForExam(exam.id) : null;
+  const namaMap = {};
+  if (wlData && wlData.list) {
+    wlData.list.forEach(p => {
+      namaMap[p.noPeserta.trim().toLowerCase()] = p.nama || '—';
+    });
+  }
+
   // Group by studentId
   const byStudent = {};
   attempts.forEach(a => {
@@ -4230,10 +4240,15 @@ async function renderAttemptList(examCode) {
     byStudent[a.studentId][a.examType || 'pretest'] = a.time;
   });
 
-  list.innerHTML = Object.entries(byStudent).map(([sid, types]) => `
+  list.innerHTML = Object.entries(byStudent).map(([sid, types]) => {
+    const nama = namaMap[sid.trim().toLowerCase()] || '—';
+    return `
     <div class="attempt-item" style="flex-direction:column;align-items:flex-start;gap:6px">
       <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
-        <div class="a-id">No. ${sid}</div>
+        <div>
+          <div class="a-id">No. ${sid}</div>
+          <div style="font-size:0.78rem;color:var(--muted-2);margin-top:1px">${nama}</div>
+        </div>
         <button class="btn btn-ghost btn-sm" onclick="resetOneAttempt('${examCode}','${sid}',null)">↩ Reset Semua</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -4244,7 +4259,8 @@ async function renderAttemptList(examCode) {
           <button onclick="resetOneAttempt('${examCode}','${sid}','posttest')" style="background:none;border:none;cursor:pointer;color:var(--red);margin-left:4px;font-size:0.7rem">✕</button>
         </span>` : '<span class="badge" style="background:var(--bg-3);color:var(--muted-2)">Post Test: belum</span>'}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function resetOneAttempt(examCode, studentId, examType) {
@@ -4742,7 +4758,7 @@ async function saveCurrentExam() {
     name: document.getElementById('exam-name').value.trim(),
     code: document.getElementById('exam-code').value.trim().toUpperCase(),
     duration: parseInt(document.getElementById('exam-duration').value)||60,
-    maxWarnings: parseInt(document.getElementById('exam-maxwarn').value)||3,
+    maxWarnings: parseInt(document.getElementById('exam-maxwarn').value)||5,
     bidang: document.getElementById('exam-bidang').value || '',
     dateStart: document.getElementById('exam-date-start').value || '',
     dateEnd: document.getElementById('exam-date-end').value || '',
@@ -4924,7 +4940,7 @@ function importJSON() {
         name: data.name || 'Ujian Import',
         code: (data.code || 'IMPORT').toUpperCase(),
         duration: data.duration || 60,
-        maxWarnings: data.maxWarnings || 3,
+        maxWarnings: data.maxWarnings || 5,
         ac: data.ac || {},
         questions: (data.questions || []).map(q => ({ ...q, id: q.id || genId() }))
       };
@@ -5542,7 +5558,7 @@ let _acGraceUntil    = 0;          // epoch ms — ignore semua trigger sebelum 
 let _blurDebounce    = null;       // timer debounce untuk blur
 let _visDebounce     = null;       // timer debounce untuk visibilitychange
 const AC_GRACE_MS    = 3000;       // 3 detik grace period setelah ujian mulai
-const AC_DEBOUNCE_MS = 1500;       // 1.5 detik debounce blur/visibility
+const AC_DEBOUNCE_MS = 3000;       // 3 detik debounce blur/visibility — lebih toleran untuk HP
 
 function initAntiCheat() {
   if (!examActive) return;
@@ -5658,10 +5674,24 @@ function stopConnMonitor() {
 
 function onVisibilityChange() {
   if (!examActive) return;
-  if (!document.hidden) return;
+
+  // Peserta kembali ke browser — set grace period agar resize/blur
+  // dari transisi kembali tidak langsung jadi violation
+  if (!document.hidden) {
+    _acGraceUntil = Date.now() + AC_GRACE_MS;
+    clearTimeout(_visDebounce);
+    clearTimeout(_blurDebounce);
+    _visDebounce = null;
+    _blurDebounce = null;
+    // Perbarui baseline ukuran layar setelah kembali
+    initialH = window.innerHeight;
+    initialW = window.innerWidth;
+    return;
+  }
+
   if (Date.now() < _acGraceUntil) return; // dalam grace period, abaikan
 
-  // Debounce: baru trigger jika masih hidden setelah 1.5 detik
+  // Debounce: baru trigger jika masih hidden setelah AC_DEBOUNCE_MS
   clearTimeout(_visDebounce);
   _visDebounce = setTimeout(() => {
     if (!examActive) return;
@@ -5698,6 +5728,23 @@ function onWindowResize() {
   const currentW = window.innerWidth;
   const deltaH = initialH - currentH;
   const deltaW = initialW - currentW;
+
+  // ── Deteksi rotate layar — BUKAN pelanggaran ──
+  // Saat rotate, lebar dan tinggi bertukar: lebar bertambah, tinggi berkurang (atau sebaliknya).
+  // Ciri khas: deltaW negatif (layar melebar) bersamaan dengan deltaH positif besar,
+  // atau orientasi berubah menurut screen.orientation API.
+  const orientationChanged = (
+    (typeof screen.orientation !== 'undefined' && screen.orientation.angle % 90 === 0) ||
+    (deltaW < 0 && deltaH > 0) ||   // portrait → landscape
+    (deltaW > 0 && deltaH < 0)      // landscape → portrait
+  );
+  if (orientationChanged && Math.abs(deltaW) > initialW * 0.15) {
+    // Update baseline ke orientasi baru, set grace period singkat
+    initialH = currentH;
+    initialW = currentW;
+    _acGraceUntil = Date.now() + AC_GRACE_MS;
+    return;
+  }
 
   // ── Deteksi split screen vertikal (layar menyempit secara horizontal) ──
   // Threshold 40% — lebih toleran dari sebelumnya (25%) untuk mengurangi false positive
@@ -5788,7 +5835,7 @@ function triggerViolation(msg) {
   // Autosave segera — jaga-jaga peserta panik tutup browser setelah warning
   saveExamSession();
 
-  const maxWarn = examConfig.maxWarnings || 3;
+  const maxWarn = examConfig.maxWarnings || 5;
   document.getElementById('warn-display').textContent = warnCount;
 
   if (warnCount >= maxWarn) {
@@ -6267,7 +6314,11 @@ function switchAdminTab(tab) {
 
   if (tab === 'ujian') {
     ujianPanel.classList.remove('hidden');
-    renderExamList();
+    if (db) {
+      cloudLoadExams().then(fresh => { if (fresh) allExams = fresh; renderExamList(); });
+    } else {
+      renderExamList();
+    }
   } else if (tab === 'soal') {
     layout.style.display = '';
     sidebar.style.display = '';
@@ -6473,6 +6524,8 @@ function getResults() {
 }
 
 async function renderDashboard() {
+  if (db) { const fresh = await cloudLoadExams(); if (fresh) allExams = fresh; }
+
   const examFilter = document.getElementById('dash-filter-exam');
   const selectedCode  = examFilter?.value || '';
   const selectedBidang    = document.getElementById('dash-filter-bidang')?.value || '';
@@ -7086,6 +7139,8 @@ async function renderComparison() {
   const examFilter = document.getElementById('cmp-filter-exam');
   if (!examFilter) return;
 
+  if (db) { const fresh = await cloudLoadExams(); if (fresh) allExams = fresh; }
+
   const selectedBidang  = document.getElementById('cmp-filter-bidang')?.value || '';
   const filterDateStart = document.getElementById('cmp-filter-date-start')?.value || '';
   const filterDateEnd   = document.getElementById('cmp-filter-date-end')?.value || '';
@@ -7224,12 +7279,13 @@ async function renderComparison() {
   `;
 }
 
-function downloadExcelComparison() {
+async function downloadExcelComparison() {
   const examFilter = document.getElementById('cmp-filter-exam');
   const selectedCode = examFilter?.value || '';
   if (!selectedCode) { toast('Pilih ujian terlebih dahulu', 'error'); return; }
 
-  const allResults  = getResults();
+  const _cloudRes3 = db ? await cloudLoadResults(selectedCode) : null;
+  const allResults  = _cloudRes3 || getResults();
   const examResults = allResults.filter(r => r.examCode === selectedCode);
   const preResults  = examResults.filter(r => r.examType === 'pretest');
   const postResults = examResults.filter(r => r.examType === 'posttest');
@@ -8610,7 +8666,8 @@ async function renderKehadiran() {
   const exam    = allExams.find(e => e.id === examId);
   const pData   = getParticipantsForExam(examId);
   const list    = pData.list || [];
-  const results = getResults().filter(r => r.examCode === (exam?.code || ''));
+  const _cloudRes = db ? await cloudLoadResults(exam?.code || null) : null;
+  const results = (_cloudRes || getResults()).filter(r => r.examCode === (exam?.code || ''));
 
   // Build lookup: noPeserta → { pretest score, posttest score }
   const resultMap = {};
@@ -8682,7 +8739,8 @@ async function downloadExcelKehadiran() {
   const list    = pData.list || [];
   if (!list.length) { toast('Tidak ada peserta terdaftar untuk ujian ini', 'error'); return; }
 
-  const results = getResults().filter(r => r.examCode === (exam?.code || ''));
+  const _cloudRes2 = db ? await cloudLoadResults(exam?.code || null) : null;
+  const results = (_cloudRes2 || getResults()).filter(r => r.examCode === (exam?.code || ''));
   const resultMap = {};
   results.forEach(r => {
     const key = (r.id||'').toLowerCase();
